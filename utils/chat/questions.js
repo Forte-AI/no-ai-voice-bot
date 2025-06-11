@@ -6,21 +6,23 @@ export const QuestionType = {
   VALIDATION: 'validation'
 };
 
+import { storeData } from './storeData';
+
 const YES_WORDS = ['yes', 'yeah', 'yep', 'yup', 'sure', 'okay', 'ok', 'correct', 'right', 'indeed', 'absolutely', 'definitely', 'certainly'];
 
 // Question structure
 export const questions = [
   {
     id: 1,
-    text: "Are you a Sonic Franchise?",
+    text: `Are you a Sonic Franchise?`,
     type: QuestionType.YES_NO,
     validate: (response) => {
       const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
       return {
         isValid: isYes,
         message: isYes 
-          ? "What is the store number, for example, 4 8 9 6?"
-          : "No problem. If you are not a Sonic franchise, please visit our website at www.fortis risk.com and submit a claim. That's www.fortis risk.com and submit your claim there. Thank you.",
+          ? `What is the store number, for example, 4 8 9 6?`
+          : `No problem. If you are not a Sonic franchise, please visit our website at www.fortis risk.com and submit a claim. That's www.fortis risk.com and submit your claim there. Thank you.`,
         endChat: !isYes
       };
     }
@@ -28,29 +30,42 @@ export const questions = [
   {
     id: 2,
     type: QuestionType.TEXT,
-    validate: (response, retryCount = 0) => {
-      const hasStoreNumber = /^\d+$/.test(response.trim());
-      if (hasStoreNumber) {
+    validate: (function() {
+      let retryCount = 0;
+      return function(response) {
+        // Extract potential store numbers from the response
+        const potentialNumbers = response.match(/[A-Za-z0-9]{4,7}/g) || [];
+        
+        // Find the first valid store number
+        const validStore = potentialNumbers.find(potentialNumber => 
+          storeData.some(store => store.storeNumber === potentialNumber)
+        );
+        
+        if (validStore) {
+          const store = storeData.find(store => store.storeNumber === validStore);
+          // Reset retry count when valid store number is found
+          retryCount = 0;
+          return {
+            isValid: true,
+            message: `Got it. So, your Sonic store number is <say-as interpret-as="digits">${validStore}</say-as>. Your store, managed by ${store.storeOwner}, is located at ${store.storeAddress} ${store.storeZipCode}. Is it correct?`
+          };
+        }
+        
+        if (retryCount >= 2) {
+          return {
+            isValid: false,
+            message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
+            endChat: true
+          };
+        }
+        
+        retryCount += 1;
         return {
-          isValid: true,
-          message: "Thank you for providing the store number."
+          isValid: false,
+          message: "I couldn't find your store number in our system. Can you tell me the Sonic store number again?"
         };
-      }
-      
-      if (retryCount >= 2) {
-        return {
-          isValid: true,
-          message: "No problem, please visit our website at www.fortisrisk.com and submit a claim. Again, that's www.fortisrisk.com and submit your claim there. Thank you",
-          endChat: true
-        };
-      }
-      
-      return {
-        isValid: false,
-        message: "Can you tell me the Sonic store number?",
-        retryCount: retryCount + 1
       };
-    }
+    })()
   },
   {
     id: 3,
