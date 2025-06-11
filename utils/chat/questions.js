@@ -1,3 +1,12 @@
+// Load environment variables
+require('dotenv').config();
+
+// Debug information
+console.log('Current working directory:', process.cwd());
+console.log('Environment variables loaded:', Object.keys(process.env));
+console.log('OPENAI_API_KEY exists:', !!process.env.OPENAI_API_KEY);
+console.log('OPENAI_API_KEY length:', process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0);
+
 // Question types
 export const QuestionType = {
   YES_NO: 'yes_no',
@@ -123,7 +132,7 @@ export const questions = [
       if (isYes) {
         return {
           isValid: true,
-          message: `What is the date of the incident, such as yesterday?`,
+          message: `What is the date of the incident?`,
           nextQuestionId: 4
         };
       }
@@ -154,29 +163,74 @@ export const questions = [
   {
     id: 4,
     type: QuestionType.TEXT,
-    validate: (response) => {
-      const isValid = response.length > 0;
-      if (isValid) {
-        return {
-          isValid: true,
-          message: "Thank you! What is your store's phone number?",
-          incidentDate: response
-        };
-      }
-      
-      if (getRetryCount(4) >= 2) {
+    validate: async (response) => {
+      try {
+        console.log('Validating date input:', response);
+        
+        const apiResponse = await fetch('/api/openai', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            systemMessage: "You are a date validator. You must respond with either a date in YYYY-MM-DD format or the word 'invalid'. Do not include any other text in your response.",
+            prompt: `Convert this date to YYYY-MM-DD format or return 'invalid': "${response}"`
+          })
+        });
+
+        if (!apiResponse.ok) {
+          throw new Error('Failed to validate date');
+        }
+
+        const { result } = await apiResponse.json();
+        console.log('OpenAI response:', result);
+        
+        const isValid = result !== "invalid";
+        
+        if (isValid) {
+          return {
+            isValid: true,
+            message: `Thank you! I've recorded the incident date as ${result}. What is your store's phone number?`,
+            incidentDate: result
+          };
+        }
+        
+        if (getRetryCount(4) >= 2) {
+          return {
+            isValid: false,
+            message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
+            endChat: true
+          };
+        }
+        
+        incrementRetryCount(4);
         return {
           isValid: false,
-          message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
-          endChat: true
+          message: "Please provide the date in the format 'Month Day, Year' (e.g., 'July 4th, 2025')."
+        };
+      } catch (error) {
+        console.error("Error validating date:", error);
+        console.error("Full error details:", {
+          message: error.message,
+          code: error.code,
+          type: error.type,
+          stack: error.stack
+        });
+        
+        if (getRetryCount(4) >= 2) {
+          return {
+            isValid: false,
+            message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
+            endChat: true
+          };
+        }
+        
+        incrementRetryCount(4);
+        return {
+          isValid: false,
+          message: "Please provide the date in the format 'Month Day, Year' (e.g., 'July 4th, 2025')."
         };
       }
-      
-      incrementRetryCount(4);
-      return {
-        isValid: false,
-        message: "Please provide the date of the incident."
-      };
     }
   },
   {

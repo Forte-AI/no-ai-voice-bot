@@ -46,8 +46,10 @@ export const ChatProvider = ({ children, speakText }) => {
         ...prev,
         [currentQuestion.id]: {
           response,
-          isValid: result.assistantMessage.text.includes('Great') || 
-                   result.assistantMessage.text.includes('Thank you')
+          isValid: result.assistantMessage?.text ? 
+            (result.assistantMessage.text.includes('Great') || 
+             result.assistantMessage.text.includes('Thank you')) : 
+            false
         }
       }));
     }
