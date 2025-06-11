@@ -63,7 +63,16 @@ export const questions = [
   {
     id: 2,
     type: QuestionType.TEXT,
-    validate: (response) => {
+    validate: (response, storeInfo = null) => {
+      // If we have store info from a previous validation, use it
+      if (storeInfo) {
+        return {
+          isValid: true,
+          message: `Got it. So, your Sonic store number is ${storeInfo.storeNumber}. Your store, managed by ${storeInfo.storeOwner}, is located at ${storeInfo.storeAddress} ${storeInfo.storeZipCode}. Is it correct?`,
+          nextQuestionId: 3
+        };
+      }
+
       // Extract potential store numbers from the response
       const potentialNumbers = response.match(/[A-Za-z0-9]{4,7}/g) || [];
       
@@ -78,7 +87,14 @@ export const questions = [
         resetRetryCount(2);
         return {
           isValid: true,
-          message: `Got it. So, your Sonic store number is <say-as interpret-as="digits">${validStore}</say-as>. Your store, managed by ${store.storeOwner}, is located at ${store.storeAddress} ${store.storeZipCode}. Is it correct?`
+          message: `Got it. So, your Sonic store number is ${validStore}. Your store, managed by ${store.storeOwner}, is located at ${store.storeAddress} ${store.storeZipCode}. Is it correct?`,
+          nextQuestionId: 3,
+          storeInfo: {
+            storeNumber: validStore,
+            storeOwner: store.storeOwner,
+            storeAddress: store.storeAddress,
+            storeZipCode: store.storeZipCode
+          }
         };
       }
       
@@ -99,27 +115,67 @@ export const questions = [
   },
   {
     id: 3,
-    type: QuestionType.TEXT,
-    validate: (response) => {
-      const isValid = response.length > 0;
+    type: QuestionType.YES_NO,
+    validate: (response, storeInfo) => {
+      const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
+      const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
+      
+      if (isYes) {
+        return {
+          isValid: true,
+          message: `What is the date of the incident, such as yesterday?`,
+          nextQuestionId: 4
+        };
+      }
+      
+      if (isNo) {
+        return {
+          isValid: false,
+          message: `What is the store number, for example, 1 2 9 6?`,
+          nextQuestionId: 1
+        };
+      }
+      
+      if (getRetryCount(3) >= 2) {
+        return {
+          isValid: false,
+          message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
+          endChat: true
+        };
+      }
+      
+      incrementRetryCount(3);
       return {
-        isValid,
-        message: isValid 
-          ? "Thank you! What is your store's phone number?"
-          : "Please provide your store's address."
+        isValid: false,
+        message: "I didn't quite catch that. Is this the correct store number?"
       };
     }
   },
   {
     id: 4,
-    type: QuestionType.NUMERIC,
+    type: QuestionType.TEXT,
     validate: (response) => {
-      const isValid = /^\d{10}$/.test(response.replace(/\D/g, ''));
+      const isValid = response.length > 0;
+      if (isValid) {
+        return {
+          isValid: true,
+          message: "Thank you! What is your store's phone number?",
+          incidentDate: response
+        };
+      }
+      
+      if (getRetryCount(4) >= 2) {
+        return {
+          isValid: false,
+          message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
+          endChat: true
+        };
+      }
+      
+      incrementRetryCount(4);
       return {
-        isValid,
-        message: isValid 
-          ? "Thank you! What is your store's operating hours?"
-          : "Please provide a valid 10-digit phone number."
+        isValid: false,
+        message: "Please provide the date of the incident."
       };
     }
   },
@@ -230,7 +286,10 @@ export const questions = [
 ];
 
 // Helper function to get the next question
-export const getNextQuestion = (currentQuestionId) => {
+export const getNextQuestion = (currentQuestionId, nextQuestionId) => {
+  if (nextQuestionId) {
+    return questions.find(q => q.id === nextQuestionId) || null;
+  }
   const currentIndex = questions.findIndex(q => q.id === currentQuestionId);
   return questions[currentIndex + 1] || null;
 };
@@ -239,8 +298,8 @@ export const getNextQuestion = (currentQuestionId) => {
 export const getFirstQuestion = () => questions[0];
 
 // Helper function to validate a response
-export const validateResponse = (questionId, response, retryCount = 0) => {
+export const validateResponse = (questionId, response, storeInfo = null) => {
   const question = questions.find(q => q.id === questionId);
   if (!question) return { isValid: false, message: "Invalid question." };
-  return question.validate(response, retryCount);
+  return question.validate(response, storeInfo);
 }; 
