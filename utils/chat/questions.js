@@ -9,6 +9,7 @@ export const QuestionType = {
 import { storeData } from './storeData';
 
 const YES_WORDS = ['yes', 'yeah', 'yep', 'yup', 'sure', 'okay', 'ok', 'correct', 'right', 'indeed', 'absolutely', 'definitely', 'certainly'];
+const NO_WORDS = ['no', 'nope', 'nah', 'negative', 'not', 'never', 'incorrect', 'wrong'];
 
 // Question structure
 export const questions = [
@@ -16,16 +17,35 @@ export const questions = [
     id: 1,
     text: `Are you a Sonic Franchise?`,
     type: QuestionType.YES_NO,
-    validate: (response) => {
-      const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
-      return {
-        isValid: isYes,
-        message: isYes 
-          ? `What is the store number, for example, 4 8 9 6?`
-          : `No problem. If you are not a Sonic franchise, please visit our website at www.fortis risk.com and submit a claim. That's www.fortis risk.com and submit your claim there. Thank you.`,
-        endChat: !isYes
+    validate: (function() {
+      let retryCount = 0;
+      return function(response) {
+        const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
+        const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
+        
+        if (isYes) {
+          retryCount = 0;
+          return {
+            isValid: true,
+            message: `What is the store number, for example, 4 8 9 6?`
+          };
+        }
+        
+        if (isNo || retryCount >= 2) {
+          return {
+            isValid: false,
+            message: `No problem. If you are not a Sonic franchise, please visit our website at www.fortis risk.com and submit a claim. That's www.fortis risk.com and submit your claim there. Thank you.`,
+            endChat: true
+          };
+        }
+        
+        retryCount += 1;
+        return {
+          isValid: false,
+          message: "I didn't quite catch that. Are you a Sonic franchise?"
+        };
       };
-    }
+    })()
   },
   {
     id: 2,
