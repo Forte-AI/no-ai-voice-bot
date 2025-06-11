@@ -25,6 +25,15 @@ export class ConversationManager {
     // Speak the validation message (which now includes the next question if valid)
     await this.speakText(validation.message);
 
+    // If endChat is true, end the conversation
+    if (validation.endChat) {
+      this.currentQuestion = null;
+      return {
+        userMessage: { role: 'user', text: response },
+        assistantMessage: { role: 'assistant', text: validation.message }
+      };
+    }
+
     // If response is valid, move to next question
     if (validation.isValid) {
       const nextQuestion = getNextQuestion(this.currentQuestion.id);

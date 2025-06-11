@@ -91,10 +91,6 @@ const ChatInterfaceContent = ({ onVoiceStart, recognizing, setInput, input }) =>
     }
   }, [isPlaying, backgroundNoiseEnabled]);
 
-  const handleVoiceInput = () => {
-    onVoiceStart();
-  };
-
   const handleInputChange = e => {
     setInput(e.target.value);
     inputRef.current = e.target.value;
@@ -179,36 +175,42 @@ const ChatInterfaceContent = ({ onVoiceStart, recognizing, setInput, input }) =>
           type="text"
           value={input}
           onChange={handleInputChange}
-          placeholder="Type or speak..."
+          placeholder={currentQuestion ? "Type or speak..." : "Click 'Start New Chat' to begin"}
+          disabled={!currentQuestion}
           style={{ 
             width: '60%',
             padding: '0.5rem',
             borderRadius: '4px',
-            border: '1px solid #ccc'
+            border: '1px solid #ccc',
+            opacity: currentQuestion ? 1 : 0.7
           }}
         />
         <button 
-          onClick={handleVoiceInput}
+          onClick={onVoiceStart}
+          disabled={!currentQuestion}
           style={{
             padding: '0.5rem 1rem',
             borderRadius: '4px',
             border: '1px solid #2196f3',
             backgroundColor: recognizing ? '#f44336' : '#2196f3',
             color: 'white',
-            cursor: 'pointer'
+            cursor: currentQuestion ? 'pointer' : 'not-allowed',
+            opacity: currentQuestion ? 1 : 0.7
           }}
         >
           🎤 {recognizing ? 'Stop' : 'Speak'}
         </button>
         <button 
           onClick={handleSendMessage}
+          disabled={!currentQuestion}
           style={{
             padding: '0.5rem 1rem',
             borderRadius: '4px',
             border: '1px solid #4caf50',
             backgroundColor: '#4caf50',
             color: 'white',
-            cursor: 'pointer'
+            cursor: currentQuestion ? 'pointer' : 'not-allowed',
+            opacity: currentQuestion ? 1 : 0.7
           }}
         >
           Send
@@ -223,7 +225,16 @@ export const ChatInterface = ({ recognitionRef }) => {
   const [input, setInput] = useState('');
   const inputRef = useRef('');
   const silenceTimeoutRef = useRef(null);
-  const { handleResponse } = useChat();
+  const { handleResponse, currentQuestion } = useChat();
+
+  // Stop recognition when chat ends
+  useEffect(() => {
+    if (!currentQuestion && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setRecognizing(false);
+      clearTimeout(silenceTimeoutRef.current);
+    }
+  }, [currentQuestion]);
 
   const handleVoiceStart = useCallback(() => {
     const recognition = recognitionRef.current;
@@ -231,13 +242,13 @@ export const ChatInterface = ({ recognitionRef }) => {
 
     if (recognizing) {
       recognition.stop();
-    } else {
+    } else if (currentQuestion) {
       inputRef.current = '';
       setInput('');
       clearTimeout(silenceTimeoutRef.current);
       recognition.start();
     }
-  }, [recognizing, recognitionRef]);
+  }, [recognizing, recognitionRef, currentQuestion]);
 
   // Speech recognition setup
   useEffect(() => {
@@ -250,6 +261,12 @@ export const ChatInterface = ({ recognitionRef }) => {
     let finalTranscript = '';
 
     recognition.onresult = event => {
+      // Stop if no current question
+      if (!currentQuestion) {
+        recognition.stop();
+        return;
+      }
+
       let interim = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const t = event.results[i][0].transcript;
@@ -264,8 +281,8 @@ export const ChatInterface = ({ recognitionRef }) => {
       clearTimeout(silenceTimeoutRef.current);
       silenceTimeoutRef.current = setTimeout(() => {
         const text = inputRef.current.trim();
-        if (text) {
-          console.log('Sending voice input:', text); // Debug log
+        if (text && currentQuestion) {
+          console.log('Sending voice input:', text);
           handleResponse(text);
           setInput('');
           inputRef.current = '';
@@ -276,13 +293,17 @@ export const ChatInterface = ({ recognitionRef }) => {
     };
 
     recognition.onstart = () => {
-      console.log('Recognition started'); // Debug log
+      if (!currentQuestion) {
+        recognition.stop();
+        return;
+      }
+      console.log('Recognition started');
       setRecognizing(true);
-      finalTranscript = ''; // Clear transcript when starting
+      finalTranscript = '';
     };
 
     recognition.onend = () => {
-      console.log('Recognition ended'); // Debug log
+      console.log('Recognition ended');
       setRecognizing(false);
       clearTimeout(silenceTimeoutRef.current);
     };
@@ -300,7 +321,7 @@ export const ChatInterface = ({ recognitionRef }) => {
         recognition.stop();
       }
     };
-  }, [handleResponse, recognitionRef]);
+  }, [handleResponse, recognitionRef, currentQuestion]);
 
   return (
     <ChatInterfaceContent 
