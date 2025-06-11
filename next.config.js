@@ -3,6 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   env: {
     VOICE_SERVER_URL: process.env.NEXT_PUBLIC_VOICE_SERVER_URL,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   },
   async headers() {
     return [
