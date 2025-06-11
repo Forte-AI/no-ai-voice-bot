@@ -11,81 +11,91 @@ import { storeData } from './storeData';
 const YES_WORDS = ['yes', 'yeah', 'yep', 'yup', 'sure', 'okay', 'ok', 'correct', 'right', 'indeed', 'absolutely', 'definitely', 'certainly'];
 const NO_WORDS = ['no', 'nope', 'nah', 'negative', 'not', 'never', 'incorrect', 'wrong'];
 
+// Store retry counts for each question
+const retryCounts = new Map();
+
+// Helper function to manage retry counts
+const getRetryCount = (questionId) => retryCounts.get(questionId) || 0;
+const incrementRetryCount = (questionId) => retryCounts.set(questionId, getRetryCount(questionId) + 1);
+const resetRetryCount = (questionId) => retryCounts.set(questionId, 0);
+
 // Question structure
 export const questions = [
   {
     id: 1,
     text: `Are you a Sonic Franchise?`,
     type: QuestionType.YES_NO,
-    validate: (function() {
-      let retryCount = 0;
-      return function(response) {
-        const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
-        const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
-        
-        if (isYes) {
-          retryCount = 0;
-          return {
-            isValid: true,
-            message: `What is the store number, for example, 4 8 9 6?`
-          };
-        }
-        
-        if (isNo || retryCount >= 2) {
-          return {
-            isValid: false,
-            message: `No problem. If you are not a Sonic franchise, please visit our website at www.fortis risk.com and submit a claim. That's www.fortis risk.com and submit your claim there. Thank you.`,
-            endChat: true
-          };
-        }
-        
-        retryCount += 1;
+    validate: (response) => {
+      const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
+      const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
+      
+      if (isYes) {
+        resetRetryCount(1);
+        return {
+          isValid: true,
+          message: `What is the store number, for example, 4 8 9 6?`
+        };
+      }
+      
+      if (isNo) {
         return {
           isValid: false,
-          message: "I didn't quite catch that. Are you a Sonic franchise?"
+          message: `No problem. If you are not a Sonic franchise, please visit our website at www.fortis risk.com and submit a claim. That's www.fortis risk.com and submit your claim there. Thank you.`,
+          endChat: true
         };
+      }
+      
+      if (getRetryCount(1) >= 2) {
+        return {
+          isValid: false,
+          message: `No problem. If you are not a Sonic franchise, please visit our website at www.fortis risk.com and submit a claim. That's www.fortis risk.com and submit your claim there. Thank you.`,
+          endChat: true
+        };
+      }
+      
+      incrementRetryCount(1);
+      return {
+        isValid: false,
+        message: "I didn't quite catch that. Are you a Sonic franchise?"
       };
-    })()
+    }
   },
   {
     id: 2,
     type: QuestionType.TEXT,
-    validate: (function() {
-      let retryCount = 0;
-      return function(response) {
-        // Extract potential store numbers from the response
-        const potentialNumbers = response.match(/[A-Za-z0-9]{4,7}/g) || [];
-        
-        // Find the first valid store number
-        const validStore = potentialNumbers.find(potentialNumber => 
-          storeData.some(store => store.storeNumber === potentialNumber)
-        );
-        
-        if (validStore) {
-          const store = storeData.find(store => store.storeNumber === validStore);
-          // Reset retry count when valid store number is found
-          retryCount = 0;
-          return {
-            isValid: true,
-            message: `Got it. So, your Sonic store number is <say-as interpret-as="digits">${validStore}</say-as>. Your store, managed by ${store.storeOwner}, is located at ${store.storeAddress} ${store.storeZipCode}. Is it correct?`
-          };
-        }
-        
-        if (retryCount >= 2) {
-          return {
-            isValid: false,
-            message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
-            endChat: true
-          };
-        }
-        
-        retryCount += 1;
+    validate: (response) => {
+      // Extract potential store numbers from the response
+      const potentialNumbers = response.match(/[A-Za-z0-9]{4,7}/g) || [];
+      
+      // Find the first valid store number
+      const validStore = potentialNumbers.find(potentialNumber => 
+        storeData.some(store => store.storeNumber === potentialNumber)
+      );
+      
+      if (validStore) {
+        const store = storeData.find(store => store.storeNumber === validStore);
+        // Reset retry count when valid store number is found
+        resetRetryCount(2);
+        return {
+          isValid: true,
+          message: `Got it. So, your Sonic store number is <say-as interpret-as="digits">${validStore}</say-as>. Your store, managed by ${store.storeOwner}, is located at ${store.storeAddress} ${store.storeZipCode}. Is it correct?`
+        };
+      }
+      
+      if (getRetryCount(2) >= 2) {
         return {
           isValid: false,
-          message: "I couldn't find your store number in our system. Can you tell me the Sonic store number again?"
+          message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
+          endChat: true
         };
+      }
+      
+      incrementRetryCount(2);
+      return {
+        isValid: false,
+        message: "I couldn't find your store number in our system. Can you tell me the Sonic store number again?"
       };
-    })()
+    }
   },
   {
     id: 3,
