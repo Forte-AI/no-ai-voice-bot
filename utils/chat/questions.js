@@ -315,11 +315,29 @@ export const questions = [
     type: QuestionType.YES_NO,
     validate: (response) => {
       const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
+      const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
+      
+      if (isYes || isNo) {
+        return {
+          isValid: true,
+          message: "Please ensure the preservation of both the video footage and witness statements. What is the name of the person involved in the incident?"
+        };
+      }
+      
+      // If response is unclear, give one retry
+      if (getRetryCount(6) === 0) {
+        incrementRetryCount(6);
+        return {
+          isValid: false,
+          message: "Sorry, I didn't catch that. Was the ambulance called?"
+        };
+      }
+      
+      // On second attempt, accept whatever they say and move to person's name
+      resetRetryCount(6);
       return {
         isValid: true,
-        message: isYes 
-          ? "Great! Please ensure the preservation of both the video footage and witness statements. What is the name of the person involved in the incident?"
-          : "Noted."
+        message: "Please ensure the preservation of both the video footage and witness statements. What is the name of the person involved in the incident?"
       };
     }
   },
