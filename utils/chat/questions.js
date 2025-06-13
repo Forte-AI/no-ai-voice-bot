@@ -555,8 +555,8 @@ export const questions = [
           resetRetryCount(10);
           return {
             isValid: true,
-            message: "Ok. Got it. I'll send out the claim now. Please stay on the line.",
-            skipNextQuestion: true // Skip the phone number question since we already have it
+            message: "You're all set. Please keep any documents, security video, photos, customer receipts and any other information essential to this claim. You will need to preserve this evidence and send all of it to the adjuster when they contact you. Bye.",
+            endChat: true
           };
         }
         
@@ -564,7 +564,7 @@ export const questions = [
           resetRetryCount(10);
           return {
             isValid: true,
-            message: "Thank you, and what is the best phone number we can reach out to?"
+            message: "Ok, and what is the best phone number we can reach out to?"
           };
         }
       } catch (error) {
@@ -590,46 +590,70 @@ export const questions = [
       resetRetryCount(10);
       return {
         isValid: true,
-        message: "Thank you! What is your phone number?"
+        message: "Thank you, and what is the best phone number we can reach out to?"
       };
     }
   },
   {
     id: 11,
-    type: QuestionType.YES_NO,
-    validate: (response) => {
-      const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
-      return {
-        isValid: true,
-        message: isYes 
-          ? "Great! What is your store's social media handle?"
-          : "Noted. What is your store's social media handle?"
-      };
-    }
-  },
-  {
-    id: 12,
     type: QuestionType.TEXT,
-    validate: (response) => {
-      const isValid = response.length > 0;
-      return {
-        isValid,
-        message: isValid 
-          ? "Thank you! Would you like to receive marketing updates?"
-          : "Please provide your store's social media handle."
-      };
-    }
-  },
-  {
-    id: 13,
-    type: QuestionType.YES_NO,
-    validate: (response) => {
-      const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
+    validate: async (response) => {
+      try {
+        console.log('Validating phone number:', response);
+        
+        const apiResponse = await fetch('/api/openai', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            systemMessage: "You are a phone number validator. You must respond with either 'valid' or 'invalid'. A valid phone number should be in a common format (e.g., '123-456-7890', '(123) 456-7890', '1234567890'). Do not include any other text in your response.",
+            prompt: `Is this a valid phone number? Respond with only 'valid' or 'invalid': "${response}"`
+          })
+        });
+
+        if (!apiResponse.ok) {
+          throw new Error('Failed to validate phone number');
+        }
+
+        const { result } = await apiResponse.json();
+        console.log('OpenAI response:', result);
+        
+        const isValid = result.toLowerCase() === "valid";
+        
+        if (isValid) {
+          resetRetryCount(11);
+          return {
+            isValid: true,
+            message: "You're all set. Please keep any documents, security video, photos, customer receipts and any other information essential to this claim. You will need to preserve this evidence and send all of it to the adjuster when they contact you. Bye.",
+            endChat: true
+          };
+        }
+      } catch (error) {
+        console.error("Error validating phone number:", error);
+        console.error("Full error details:", {
+          message: error.message,
+          code: error.code,
+          type: error.type,
+          stack: error.stack
+        });
+      }
+      
+      // Handle both invalid phone numbers and API errors with the same retry logic
+      if (getRetryCount(11) === 0) {
+        incrementRetryCount(11);
+        return {
+          isValid: false,
+          message: "We need a phone number so our adjuster can follow up. Please provide the best phone number we can reach you at."
+        };
+      }
+      
+      // On second attempt, accept whatever they say and end chat
+      resetRetryCount(11);
       return {
         isValid: true,
-        message: isYes 
-          ? "Great! Thank you for completing the questionnaire. Have a great day!"
-          : "Noted. Thank you for completing the questionnaire. Have a great day!"
+        message: "You're all set. Please keep any documents, security video, photos, customer receipts and any other information essential to this claim. You will need to preserve this evidence and send all of it to the adjuster when they contact you. Bye.",
+        endChat: true
       };
     }
   }
