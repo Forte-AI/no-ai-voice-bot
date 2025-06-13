@@ -72,7 +72,7 @@ export const questions = [
   {
     id: 2,
     type: QuestionType.TEXT,
-    validate: (response, storeInfo = null) => {
+    validate: async (response, storeInfo = null) => {
       // If we have store info from a previous validation, use it
       if (storeInfo) {
         return {
@@ -82,44 +82,101 @@ export const questions = [
         };
       }
 
-      // Extract potential store numbers from the response
-      const potentialNumbers = response.match(/[A-Za-z0-9]{4,7}/g) || [];
-      
-      // Find the first valid store number
-      const validStore = potentialNumbers.find(potentialNumber => 
-        storeData.some(store => store.storeNumber === potentialNumber)
-      );
-      
-      if (validStore) {
-        const store = storeData.find(store => store.storeNumber === validStore);
-        // Reset retry count when valid store number is found
-        resetRetryCount(2);
-        return {
-          isValid: true,
-          message: `Got it. So, your Sonic store number is ${validStore}. Your store, managed by ${store.storeOwner}, is located at ${store.storeAddress} ${store.storeZipCode}. Is it correct?`,
-          nextQuestionId: 3,
-          storeInfo: {
-            storeNumber: validStore,
-            storeOwner: store.storeOwner,
-            storeAddress: store.storeAddress,
-            storeZipCode: store.storeZipCode
+      try {
+        console.log('Extracting store number from user input:', response);
+        
+        const apiResponse = await fetch('/api/openai', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            systemMessage: "You are a store number extractor. You must respond with either a store number or 'invalid'. A store number can be 4 digits (e.g., '2438','1214','9999'), or special formats (e.g., '000WH7', 'MCCA003'). If you can't find a valid store number, respond with 'invalid'. Do not include any other text in your response.",
+            prompt: `Analyze the user message and extract the store number from it if there is a possible store number. The store number could be 4 digits or a special format. If you can't find a valid store number, respond with 'invalid': "${response}"`
+          })
+        });
+
+        if (!apiResponse.ok) {
+          throw new Error('Failed to extract store number');
+        }
+
+        const { result } = await apiResponse.json();
+        console.log('OpenAI extracted store number:', result);
+        console.log('Original user input:', response);
+        
+        if (result.toLowerCase() === 'invalid') {
+          console.log('OpenAI could not find a valid store number in the input');
+          if (getRetryCount(2) >= 2) {
+            return {
+              isValid: false,
+              message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
+              endChat: true
+            };
           }
-        };
-      }
-      
-      if (getRetryCount(2) >= 2) {
+          
+          incrementRetryCount(2);
+          return {
+            isValid: false,
+            message: "I couldn't find your store number in our system. Can you tell me the Sonic store number again?"
+          };
+        }
+
+        // Find the store in our data
+        const store = storeData.find(store => store.storeNumber === result);
+        
+        if (store) {
+          // Reset retry count when valid store number is found
+          resetRetryCount(2);
+          return {
+            isValid: true,
+            message: `Got it. So, your Sonic store number is ${result}. Your store, managed by ${store.storeOwner}, is located at ${store.storeAddress} ${store.storeZipCode}. Is it correct?`,
+            nextQuestionId: 3,
+            storeInfo: {
+              storeNumber: result,
+              storeOwner: store.storeOwner,
+              storeAddress: store.storeAddress,
+              storeZipCode: store.storeZipCode
+            }
+          };
+        }
+        
+        // If store number format is valid but not found in our data
+        if (getRetryCount(2) >= 2) {
+          return {
+            isValid: false,
+            message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
+            endChat: true
+          };
+        }
+        
+        incrementRetryCount(2);
         return {
           isValid: false,
-          message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
-          endChat: true
+          message: "I couldn't find your store number in our system. Can you tell me the Sonic store number again?"
+        };
+      } catch (error) {
+        console.error("Error extracting store number:", error);
+        console.error("Full error details:", {
+          message: error.message,
+          code: error.code,
+          type: error.type,
+          stack: error.stack
+        });
+        
+        if (getRetryCount(2) >= 2) {
+          return {
+            isValid: false,
+            message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
+            endChat: true
+          };
+        }
+        
+        incrementRetryCount(2);
+        return {
+          isValid: false,
+          message: "I couldn't find your store number in our system. Can you tell me the Sonic store number again?"
         };
       }
-      
-      incrementRetryCount(2);
-      return {
-        isValid: false,
-        message: "I couldn't find your store number in our system. Can you tell me the Sonic store number again?"
-      };
     }
   },
   {
