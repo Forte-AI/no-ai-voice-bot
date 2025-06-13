@@ -343,14 +343,62 @@ export const questions = [
   },
   {
     id: 7,
-    type: QuestionType.YES_NO,
-    validate: (response) => {
-      const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
+    type: QuestionType.TEXT,
+    validate: async (response) => {
+      try {
+        console.log('Validating person name:', response);
+        
+        const apiResponse = await fetch('/api/openai', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            systemMessage: "You are a name validator. You must respond with either 'valid' or 'invalid'. A valid name should be a reasonable human name (e.g., 'Jim', 'Lucy', 'Robert Johnson', 'John Smith', 'Maria Garcia'). Do not include any other text in your response.",
+            prompt: `Is this a valid human name? Respond with only 'valid' or 'invalid': "${response}"`
+          })
+        });
+
+        if (!apiResponse.ok) {
+          throw new Error('Failed to validate name');
+        }
+
+        const { result } = await apiResponse.json();
+        console.log('OpenAI response:', result);
+        
+        const isValid = result.toLowerCase() === "valid";
+        
+        if (isValid) {
+          resetRetryCount(7);
+          return {
+            isValid: true,
+            message: "Got it, and what is the phone number of the person involved in the incident?"
+          };
+        }
+      } catch (error) {
+        console.error("Error validating name:", error);
+        console.error("Full error details:", {
+          message: error.message,
+          code: error.code,
+          type: error.type,
+          stack: error.stack
+        });
+      }
+      
+      // Handle both invalid names and API errors with the same retry logic
+      if (getRetryCount(7) === 0) {
+        incrementRetryCount(7);
+        return {
+          isValid: false,
+          message: "Could you provide the name of the person involved in the incident?"
+        };
+      }
+      
+      // On second attempt, accept whatever they say and move to phone number
+      resetRetryCount(7);
       return {
         isValid: true,
-        message: isYes 
-          ? "Great! What is your store's manager's name?"
-          : "Noted. What is your store's manager's name?"
+        message: "Got it. What is the phone number of the person involved in the incident?"
       };
     }
   },
