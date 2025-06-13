@@ -132,7 +132,7 @@ export const questions = [
       if (isYes) {
         return {
           isValid: true,
-          message: `What is the date of the incident?`,
+          message: `What is the date of the incident, such as July 4th?`,
           nextQuestionId: 4
         };
       }
@@ -173,8 +173,8 @@ export const questions = [
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            systemMessage: "You are a date validator. You must respond with either a date in YYYY-MM-DD format or the word 'invalid'. Do not include any other text in your response.",
-            prompt: `Convert this date to YYYY-MM-DD format or return 'invalid': "${response}"`
+            systemMessage: "You are a date validator. You must respond with either 'valid' or 'invalid'. A valid date can be in any common format, for example: month and day (e.g., 'July 4th', 'June 5'), month-day-year (e.g., '6-5-2025', '06/05/2025'), or full date (e.g., 'June 5th, 2025'). Do not include any other text in your response.",
+            prompt: `Does this user message contain a valid date? The date should have at least a month and day, and optionally a year. Respond with only 'valid' or 'invalid': "${response}"`
           })
         });
 
@@ -185,29 +185,16 @@ export const questions = [
         const { result } = await apiResponse.json();
         console.log('OpenAI response:', result);
         
-        const isValid = result !== "invalid";
+        const isValid = result.toLowerCase() === "valid";
         
         if (isValid) {
+          resetRetryCount(4);
           return {
             isValid: true,
-            message: `Thank you! I've recorded the incident date as ${result}. Please describe the incident in one short sentence.`,
-            incidentDate: result
+            message: "Please describe the incident in one short sentence.",
+            incidentDate: response
           };
         }
-        
-        if (getRetryCount(4) >= 2) {
-          return {
-            isValid: false,
-            message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
-            endChat: true
-          };
-        }
-        
-        incrementRetryCount(4);
-        return {
-          isValid: false,
-          message: "Please provide the date in the format 'Month Day, Year' (e.g., 'July 4th, 2025')."
-        };
       } catch (error) {
         console.error("Error validating date:", error);
         console.error("Full error details:", {
@@ -216,21 +203,24 @@ export const questions = [
           type: error.type,
           stack: error.stack
         });
-        
-        if (getRetryCount(4) >= 2) {
-          return {
-            isValid: false,
-            message: `No problem, please visit our website at www.fortis risk.com and submit a claim. Again, that's www.fortis risk.com and submit your claim there. Thank you.`,
-            endChat: true
-          };
-        }
-        
+      }
+      
+      // Handle both invalid dates and API errors with the same retry logic
+      if (getRetryCount(4) === 0) {
         incrementRetryCount(4);
         return {
           isValid: false,
-          message: "Please provide the date in the format 'Month Day, Year' (e.g., 'July 4th, 2025')."
+          message: "I didn't hear the date properly. What is the date of the incident, such as July 4th?"
         };
       }
+      
+      // On second attempt, accept whatever they say and move on
+      resetRetryCount(4);
+      return {
+        isValid: true,
+        message: "Please describe the incident in one short sentence.",
+        incidentDate: response
+      };
     }
   },
   {
@@ -264,7 +254,7 @@ export const questions = [
           resetRetryCount(5);
           return {
             isValid: true,
-            message: "Thank you! Did you call ambulance?"
+            message: "Was the ambulance called?"
           };
         }
         
@@ -281,7 +271,7 @@ export const questions = [
         resetRetryCount(5);
         return {
           isValid: true,
-          message: "Was the ambulance called?"
+          message: "Got it. Did you call ambulance?"
         };
       } catch (error) {
         console.error("Error validating incident:", error);
@@ -355,7 +345,7 @@ export const questions = [
           },
           body: JSON.stringify({
             systemMessage: "You are a name validator. You must respond with either 'valid' or 'invalid'. A valid name should be a reasonable human name (e.g., 'Jim', 'Lucy', 'Robert Johnson', 'John Smith', 'Maria Garcia'). Do not include any other text in your response.",
-            prompt: `Is this a valid human name? Respond with only 'valid' or 'invalid': "${response}"`
+            prompt: `Does this user message contain a valid name? Respond with only 'valid' or 'invalid': "${response}"`
           })
         });
 
@@ -415,8 +405,8 @@ export const questions = [
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            systemMessage: "You are a phone number validator. You must respond with either 'valid' or 'invalid'. A valid phone number should be in a common format (e.g., '123-456-7890', '(123) 456-7890', '1234567890', 'I don't know', 'unknown', 'not available'). Do not include any other text in your response.",
-            prompt: `Is this a valid phone number or a valid 'don't know' response? Respond with only 'valid' or 'invalid': "${response}"`
+            systemMessage: "You are a phone number validator. You must respond with either 'valid' or 'invalid'. Do not include any other text in your response.",
+            prompt: `Does this user message contain a valid phone number? Respond with only 'valid' or 'invalid': "${response}"`
           })
         });
 
@@ -477,7 +467,7 @@ export const questions = [
           },
           body: JSON.stringify({
             systemMessage: "You are an address validator. You must respond with either 'valid' or 'invalid'. A valid address can be a full address (e.g., '123 Main St, City, State 12345'), a partial address (e.g., '123 Main St' or 'City, State'), or responses indicating no address available (e.g., 'I don't know', 'unknown', 'not available', 'no address'). Do not include any other text in your response.",
-            prompt: `Is this a valid address or a valid 'don't know' response? Respond with only 'valid' or 'invalid': "${response}"`
+            prompt: `Does this message contain a valid address or a valid 'don't know' response? Respond with only 'valid' or 'invalid': "${response}"`
           })
         });
 
@@ -538,7 +528,7 @@ export const questions = [
           },
           body: JSON.stringify({
             systemMessage: "You are a name and phone number validator. You must respond with either 'valid_name', 'valid_with_phone', or 'invalid'. A valid name should be a reasonable human name (e.g., 'Jim', 'Lucy', 'Robert Johnson'). A valid phone number should be in a common format (e.g., '123-456-7890', '(123) 456-7890', '1234567890'). If the input contains both a valid name and phone number, respond with 'valid_with_phone'. Do not include any other text in your response.",
-            prompt: `Does this contain a valid name and optionally a phone number? Respond with only 'valid_name', 'valid_with_phone', or 'invalid': "${response}"`
+            prompt: `Does this user message contain a valid name and optionally a phone number? Respond with only 'valid_name', 'valid_with_phone', or 'invalid': "${response}"`
           })
         });
 
@@ -607,8 +597,8 @@ export const questions = [
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            systemMessage: "You are a phone number validator. You must respond with either 'valid' or 'invalid'. A valid phone number should be in a common format (e.g., '123-456-7890', '(123) 456-7890', '1234567890'). Do not include any other text in your response.",
-            prompt: `Is this a valid phone number? Respond with only 'valid' or 'invalid': "${response}"`
+            systemMessage: "You are a phone number validator. You must respond with either 'valid' or 'invalid'. Do not include any other text in your response.",
+            prompt: `Does this user message contain a valid phone number? Respond with only 'valid' or 'invalid': "${response}"`
           })
         });
 
