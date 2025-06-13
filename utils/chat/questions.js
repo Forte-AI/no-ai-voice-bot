@@ -263,7 +263,7 @@ export const questions = [
           incrementRetryCount(5);
           return {
             isValid: false,
-            message: "Please provide a clear description of what happened during the incident. For example: 'A customer slipped on a wet floor in the dining area' or 'The drive-thru speaker system malfunctioned'."
+            message: "Please provide a clear description of what happened during the incident. For example: 'A customer slipped on a wet floor in the dining area'."
           };
         }
         
@@ -466,7 +466,7 @@ export const questions = [
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            systemMessage: "You are an address validator. You must respond with either 'valid' or 'invalid'. A valid address can be a full address (e.g., '123 Main St, City, State 12345'), a partial address (e.g., '123 Main St' or 'City, State'), or responses indicating no address available (e.g., 'I don't know', 'unknown', 'not available', 'no address'). Do not include any other text in your response.",
+            systemMessage: "You are an address validator. You must respond with either 'valid' or 'invalid'. A valid address can be a full address (e.g., '123 Main St, City, State 12345'), a partial address with zip code, a common phrase like an address, or responses the user doesn't know the address. Do not include any other text in your response.",
             prompt: `Does this message contain a valid address or a valid 'don't know' response? Respond with only 'valid' or 'invalid': "${response}"`
           })
         });
