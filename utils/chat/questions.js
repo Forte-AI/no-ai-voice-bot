@@ -190,7 +190,7 @@ export const questions = [
         if (isValid) {
           return {
             isValid: true,
-            message: `Thank you! I've recorded the incident date as ${result}. What is your store's phone number?`,
+            message: `Thank you! I've recorded the incident date as ${result}. Please describe the incident in one short sentence.`,
             incidentDate: result
           };
         }
@@ -236,14 +236,78 @@ export const questions = [
   {
     id: 5,
     type: QuestionType.TEXT,
-    validate: (response) => {
-      const isValid = response.length > 0;
-      return {
-        isValid,
-        message: isValid 
-          ? "Thank you! Do you offer drive-thru service?"
-          : "Please provide your store's operating hours."
-      };
+    validate: async (response) => {
+      try {
+        console.log('Validating incident description:', response);
+        
+        const apiResponse = await fetch('/api/openai', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            systemMessage: "You are an incident validator for a fast food restaurant. You must respond with either 'valid' or 'invalid'. A valid incident is something that could reasonably occur in a fast food restaurant setting (e.g., slip and fall, food safety issues, customer complaints, equipment malfunction, etc.). Do not include any other text in your response.",
+            prompt: `Is this a valid incident that could occur in a fast food restaurant? Respond with only 'valid' or 'invalid': "${response}"`
+          })
+        });
+
+        if (!apiResponse.ok) {
+          throw new Error('Failed to validate incident');
+        }
+
+        const { result } = await apiResponse.json();
+        console.log('OpenAI response:', result);
+        
+        const isValid = result.toLowerCase() === "valid";
+        
+        if (isValid) {
+          resetRetryCount(5);
+          return {
+            isValid: true,
+            message: "Thank you! Did you call ambulance?"
+          };
+        }
+        
+        // If this is the first invalid attempt, ask for clarification
+        if (getRetryCount(5) === 0) {
+          incrementRetryCount(5);
+          return {
+            isValid: false,
+            message: "Please provide a clear description of what happened during the incident. For example: 'A customer slipped on a wet floor in the dining area' or 'The drive-thru speaker system malfunctioned'."
+          };
+        }
+        
+        // On second attempt, accept whatever they say and move on
+        resetRetryCount(5);
+        return {
+          isValid: true,
+          message: "Was the ambulance called?"
+        };
+      } catch (error) {
+        console.error("Error validating incident:", error);
+        console.error("Full error details:", {
+          message: error.message,
+          code: error.code,
+          type: error.type,
+          stack: error.stack
+        });
+        
+        // If this is the first error, try again
+        if (getRetryCount(5) === 0) {
+          incrementRetryCount(5);
+          return {
+            isValid: false,
+            message: "Please provide a clear description of what happened during the incident. For example: 'A customer slipped on a wet floor in the dining area' or 'The drive-thru speaker system malfunctioned'."
+          };
+        }
+        
+        // On second error, accept whatever they say and move on
+        resetRetryCount(5);
+        return {
+          isValid: true,
+          message: "Did you call ambulance?"
+        };
+      }
     }
   },
   {
@@ -254,8 +318,8 @@ export const questions = [
       return {
         isValid: true,
         message: isYes 
-          ? "Great! Do you have indoor seating?"
-          : "Noted. Do you have indoor seating?"
+          ? "Great! Please ensure the preservation of both the video footage and witness statements. What is the name of the person involved in the incident?"
+          : "Noted."
       };
     }
   },
