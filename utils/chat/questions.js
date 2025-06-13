@@ -527,13 +527,70 @@ export const questions = [
   {
     id: 10,
     type: QuestionType.TEXT,
-    validate: (response) => {
-      const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(response);
+    validate: async (response) => {
+      try {
+        console.log('Validating contact name and phone:', response);
+        
+        const apiResponse = await fetch('/api/openai', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            systemMessage: "You are a name and phone number validator. You must respond with either 'valid_name', 'valid_with_phone', or 'invalid'. A valid name should be a reasonable human name (e.g., 'Jim', 'Lucy', 'Robert Johnson'). A valid phone number should be in a common format (e.g., '123-456-7890', '(123) 456-7890', '1234567890'). If the input contains both a valid name and phone number, respond with 'valid_with_phone'. Do not include any other text in your response.",
+            prompt: `Does this contain a valid name and optionally a phone number? Respond with only 'valid_name', 'valid_with_phone', or 'invalid': "${response}"`
+          })
+        });
+
+        if (!apiResponse.ok) {
+          throw new Error('Failed to validate name and phone');
+        }
+
+        const { result } = await apiResponse.json();
+        console.log('OpenAI response:', result);
+        
+        const responseType = result.toLowerCase();
+        
+        if (responseType === 'valid_with_phone') {
+          resetRetryCount(10);
+          return {
+            isValid: true,
+            message: "Ok. Got it. I'll send out the claim now. Please stay on the line.",
+            skipNextQuestion: true // Skip the phone number question since we already have it
+          };
+        }
+        
+        if (responseType === 'valid_name') {
+          resetRetryCount(10);
+          return {
+            isValid: true,
+            message: "Thank you, and what is the best phone number we can reach out to?"
+          };
+        }
+      } catch (error) {
+        console.error("Error validating name and phone:", error);
+        console.error("Full error details:", {
+          message: error.message,
+          code: error.code,
+          type: error.type,
+          stack: error.stack
+        });
+      }
+      
+      // Handle both invalid names and API errors with the same retry logic
+      if (getRetryCount(10) === 0) {
+        incrementRetryCount(10);
+        return {
+          isValid: false,
+          message: "Could you provide your name or the name of the person we can reach out to regarding this incident. This will facilitate prompt communication with the adjustor within the next 24 hours."
+        };
+      }
+      
+      // On second attempt, accept whatever they say and move to phone number
+      resetRetryCount(10);
       return {
-        isValid,
-        message: isValid 
-          ? "Thank you! Do you accept mobile payments?"
-          : "Please provide a valid email address."
+        isValid: true,
+        message: "Thank you! What is your phone number?"
       };
     }
   },
