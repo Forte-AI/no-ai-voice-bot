@@ -405,18 +405,127 @@ export const questions = [
   {
     id: 8,
     type: QuestionType.TEXT,
-    validate: (response) => {
-      const isValid = response.length > 0;
+    validate: async (response) => {
+      try {
+        console.log('Validating phone number:', response);
+        
+        const apiResponse = await fetch('/api/openai', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            systemMessage: "You are a phone number validator. You must respond with either 'valid' or 'invalid'. A valid phone number should be in a common format (e.g., '123-456-7890', '(123) 456-7890', '1234567890', 'I don't know', 'unknown', 'not available'). Do not include any other text in your response.",
+            prompt: `Is this a valid phone number or a valid 'don't know' response? Respond with only 'valid' or 'invalid': "${response}"`
+          })
+        });
+
+        if (!apiResponse.ok) {
+          throw new Error('Failed to validate phone number');
+        }
+
+        const { result } = await apiResponse.json();
+        console.log('OpenAI response:', result);
+        
+        const isValid = result.toLowerCase() === "valid";
+        
+        if (isValid) {
+          resetRetryCount(8);
+          return {
+            isValid: true,
+            message: "Ok. What is the address of the person involved in the incident?"
+          };
+        }
+      } catch (error) {
+        console.error("Error validating phone number:", error);
+        console.error("Full error details:", {
+          message: error.message,
+          code: error.code,
+          type: error.type,
+          stack: error.stack
+        });
+      }
+      
+      // Handle both invalid phone numbers and API errors with the same retry logic
+      if (getRetryCount(8) === 0) {
+        incrementRetryCount(8);
+        return {
+          isValid: false,
+          message: "Could you provide the phone number of the person involved in the incident? If you don't know, please say 'I don't know'."
+        };
+      }
+      
+      // On second attempt, accept whatever they say and move to address
+      resetRetryCount(8);
       return {
-        isValid,
-        message: isValid 
-          ? "Thank you! What is your store's email address?"
-          : "Please provide the store manager's name."
+        isValid: true,
+        message: "Ok. What is the address of the person involved in the incident?"
       };
     }
   },
   {
     id: 9,
+    type: QuestionType.TEXT,
+    validate: async (response) => {
+      try {
+        console.log('Validating address:', response);
+        
+        const apiResponse = await fetch('/api/openai', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            systemMessage: "You are an address validator. You must respond with either 'valid' or 'invalid'. A valid address can be a full address (e.g., '123 Main St, City, State 12345'), a partial address (e.g., '123 Main St' or 'City, State'), or responses indicating no address available (e.g., 'I don't know', 'unknown', 'not available', 'no address'). Do not include any other text in your response.",
+            prompt: `Is this a valid address or a valid 'don't know' response? Respond with only 'valid' or 'invalid': "${response}"`
+          })
+        });
+
+        if (!apiResponse.ok) {
+          throw new Error('Failed to validate address');
+        }
+
+        const { result } = await apiResponse.json();
+        console.log('OpenAI response:', result);
+        
+        const isValid = result.toLowerCase() === "valid";
+        
+        if (isValid) {
+          resetRetryCount(9);
+          return {
+            isValid: true,
+            message: "Additionally, what is your name or the name of the contact person we can reach out to regarding this incident? This will facilitate prompt communication with the adjustor within the next 24 hours."
+          };
+        }
+      } catch (error) {
+        console.error("Error validating address:", error);
+        console.error("Full error details:", {
+          message: error.message,
+          code: error.code,
+          type: error.type,
+          stack: error.stack
+        });
+      }
+      
+      // Handle both invalid addresses and API errors with the same retry logic
+      if (getRetryCount(9) === 0) {
+        incrementRetryCount(9);
+        return {
+          isValid: false,
+          message: "Please provide the full address of the person involved in the incident. You should include the zip code."
+        };
+      }
+      
+      // On second attempt, accept whatever they say and move to contact person
+      resetRetryCount(9);
+      return {
+        isValid: true,
+        message: "Additionally, what is your name or the name of the contact person we can reach out to regarding this incident? This will facilitate prompt communication with the adjustor within the next 24 hours."
+      };
+    }
+  },
+  {
+    id: 10,
     type: QuestionType.TEXT,
     validate: (response) => {
       const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(response);
@@ -429,7 +538,7 @@ export const questions = [
     }
   },
   {
-    id: 10,
+    id: 11,
     type: QuestionType.YES_NO,
     validate: (response) => {
       const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
@@ -442,7 +551,7 @@ export const questions = [
     }
   },
   {
-    id: 11,
+    id: 12,
     type: QuestionType.TEXT,
     validate: (response) => {
       const isValid = response.length > 0;
@@ -455,7 +564,7 @@ export const questions = [
     }
   },
   {
-    id: 12,
+    id: 13,
     type: QuestionType.YES_NO,
     validate: (response) => {
       const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
