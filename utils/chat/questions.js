@@ -91,7 +91,7 @@ export const questions = [
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            systemMessage: "You are a store number extractor. You must respond with either a store number or 'invalid'. A store number can be 4 digits (e.g., '2438','1214','9999'), or special formats (e.g., '000WH7', 'MCCA003'). If you can't find a valid store number, respond with 'invalid'. Do not include any other text in your response.",
+            systemMessage: "You are a store number extractor. You must respond with either a store number or 'invalid'. A store number can be 4 digits (e.g., '2438','1214','9999'), or special formats (e.g., '000WH7', 'MCCA003','2005A'). If you can't find a valid store number, respond with 'invalid'. Do not include any other text in your response.",
             prompt: `Analyze the user message and extract the store number from it if there is a possible store number. The store number could be 4 digits or a special format. If you can't find a valid store number, respond with 'invalid': "${response}"`
           })
         });
