@@ -12,9 +12,39 @@ function ChatInterface() {
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const streamRef = useRef(null);
+
+  const cleanupRecording = () => {
+    if (mediaRecorderRef.current) {
+      try {
+        if (mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
+      } catch (error) {
+        console.error('Error stopping media recorder:', error);
+      }
+      mediaRecorderRef.current = null;
+    }
+    
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    
+    audioChunksRef.current = [];
+    setIsListening(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      cleanupRecording();
+    };
+  }, []);
 
   const startRecording = async () => {
     try {
+      cleanupRecording();
+
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           channelCount: 1,
@@ -24,6 +54,7 @@ function ChatInterface() {
         } 
       });
       
+      streamRef.current = stream;
       mediaRecorderRef.current = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus',
         audioBitsPerSecond: 48000
@@ -48,14 +79,15 @@ function ChatInterface() {
         
         reader.onloadend = async () => {
           try {
-            console.log('Sending audio data to server');
+            console.log('Sending audio data to server for session:', sessionId);
             const response = await fetch('/api/speech-to-text', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                audio: reader.result
+                audio: reader.result,
+                sessionId: sessionId
               })
             });
 
@@ -79,7 +111,6 @@ function ChatInterface() {
         reader.readAsDataURL(audioBlob);
       };
 
-      // Start recording with a 1-second interval for data chunks
       mediaRecorderRef.current.start(1000);
       setIsListening(true);
       setSpeechError(null);
@@ -93,8 +124,6 @@ function ChatInterface() {
     if (mediaRecorderRef.current && isListening) {
       try {
         mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-        setIsListening(false);
       } catch (error) {
         console.error('Error stopping recording:', error);
         setSpeechError('Error stopping recording. Please try again.');
@@ -148,7 +177,6 @@ function ChatInterface() {
     if (!text.trim() || isEnded || !isStarted) return;
 
     setIsProcessing(true);
-    // Add user message
     setMessages(prev => [...prev, { role: 'user', content: text }]);
     setInput('');
 
@@ -167,13 +195,10 @@ function ChatInterface() {
       const data = await response.json();
       
       if (data.message) {
-        // Add assistant message
         setMessages(prev => [...prev, { role: 'assistant', content: data.message }]);
         
-        // Convert to speech
         await speakText(data.message);
         
-        // Check if chat has ended
         if (data.endChat) {
           setIsEnded(true);
         }
@@ -191,7 +216,7 @@ function ChatInterface() {
 
   const speakText = async (text) => {
     try {
-      console.log('Sending text to TTS:', text);
+      console.log('Sending text to TTS for session:', sessionId);
       const audioRes = await fetch('/api/text-to-speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -209,7 +234,8 @@ function ChatInterface() {
             pitch: 0.0,
             volumeGainDb: 0.0,
             effectsProfileId: ['headphone-class-device']
-          }
+          },
+          sessionId: sessionId
         }),
       });
 
@@ -229,7 +255,6 @@ function ChatInterface() {
       
       audio.onended = () => {
         if (!isEnded) {
-          // Start recording after a short delay
           setTimeout(() => {
             startRecording();
           }, 500);

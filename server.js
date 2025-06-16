@@ -75,25 +75,39 @@ if (process.env.GOOGLE_CREDENTIALS_BASE64) {
   });
 }
 
-// Store chat sessions
+// Store chat sessions and their audio processing state
 const chatSessions = new Map();
+const audioProcessingSessions = new Map();
 
 // Web voice input endpoint
 app.post('/api/speech-to-text', async (req, res) => {
+  const sessionId = req.body.sessionId;
+  if (!sessionId) {
+    return res.status(400).json({ error: 'No session ID provided' });
+  }
+
+  // Check if this session is already processing audio
+  if (audioProcessingSessions.get(sessionId)) {
+    return res.status(409).json({ error: 'Audio processing already in progress for this session' });
+  }
+
   try {
     if (!req.body.audio) {
       console.error('No audio data in request body');
       return res.status(400).json({ error: 'No audio data provided' });
     }
 
-    console.log('Received audio data, length:', req.body.audio.length);
+    // Mark this session as processing audio
+    audioProcessingSessions.set(sessionId, true);
+
+    console.log('Received audio data for session:', sessionId, 'length:', req.body.audio.length);
     
     // Convert base64 audio to buffer
     const audioBuffer = Buffer.from(req.body.audio.split(',')[1], 'base64');
     console.log('Converted audio buffer size:', audioBuffer.length);
     
-    // Create a temporary file
-    const tempFile = path.join(os.tmpdir(), `web-recording-${Date.now()}.wav`);
+    // Create a temporary file with session ID
+    const tempFile = path.join(os.tmpdir(), `web-recording-${sessionId}-${Date.now()}.webm`);
     fs.writeFileSync(tempFile, audioBuffer);
     console.log('Created temporary file:', tempFile);
 
@@ -118,26 +132,28 @@ app.post('/api/speech-to-text', async (req, res) => {
         config: config,
       };
       
-      console.log('Sending request to Google Speech-to-Text');
+      console.log('Sending request to Google Speech-to-Text for session:', sessionId);
       // Perform the transcription
       const [response] = await speechClient.recognize(request);
-      console.log('Received response from Google Speech-to-Text:', response);
+      console.log('Received response from Google Speech-to-Text for session:', sessionId);
       
       const transcription = response.results
         .map(result => result.alternatives[0].transcript)
         .join('\n');
       
-      console.log('Transcription result:', transcription);
+      console.log('Transcription result for session:', sessionId, ':', transcription);
       res.json({ text: transcription });
     } finally {
       // Clean up the temporary file
       if (fs.existsSync(tempFile)) {
         fs.unlinkSync(tempFile);
-        console.log('Cleaned up temporary file');
+        console.log('Cleaned up temporary file for session:', sessionId);
       }
+      // Remove session from processing state
+      audioProcessingSessions.delete(sessionId);
     }
   } catch (error) {
-    console.error('Error processing speech:', error);
+    console.error('Error processing speech for session:', sessionId, error);
     console.error('Error details:', {
       message: error.message,
       code: error.code,
@@ -149,6 +165,8 @@ app.post('/api/speech-to-text', async (req, res) => {
         hasClientEmail: !!process.env.GOOGLE_CLIENT_EMAIL
       }
     });
+    // Remove session from processing state
+    audioProcessingSessions.delete(sessionId);
     res.status(500).json({ 
       error: 'Error processing speech',
       details: error.message 
@@ -208,9 +226,14 @@ app.post('/api/chat', async (req, res) => {
 
 // Text-to-Speech endpoint
 app.post('/api/text-to-speech', async (req, res) => {
+  const sessionId = req.body.sessionId;
+  if (!sessionId) {
+    return res.status(400).json({ error: 'No session ID provided' });
+  }
+
   try {
     const { input, voice, audioConfig } = req.body;
-    console.log('TTS Request received with body:', req.body);
+    console.log('TTS Request received for session:', sessionId, 'body:', req.body);
     console.log('TTS Client initialized:', !!ttsClient);
 
     const request = {
@@ -219,19 +242,19 @@ app.post('/api/text-to-speech', async (req, res) => {
       audioConfig
     };
 
-    console.log('Sending request to Google TTS with config:', JSON.stringify(request, null, 2));
+    console.log('Sending request to Google TTS with config for session:', sessionId);
     const [response] = await ttsClient.synthesizeSpeech(request);
-    console.log('Received response from Google TTS, audio content length:', response?.audioContent?.length);
+    console.log('Received response from Google TTS for session:', sessionId, 'audio content length:', response?.audioContent?.length);
     
     if (!response || !response.audioContent) {
-      console.error('Invalid response from Google TTS:', response);
+      console.error('Invalid response from Google TTS for session:', sessionId);
       throw new Error('Invalid response from Google TTS');
     }
 
     res.set('Content-Type', 'audio/mpeg');
     res.send(response.audioContent);
   } catch (error) {
-    console.error('Error with text-to-speech:', error);
+    console.error('Error with text-to-speech for session:', sessionId, error);
     console.error('Error details:', {
       message: error.message,
       code: error.code,
