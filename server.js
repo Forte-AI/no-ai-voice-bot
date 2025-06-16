@@ -3,6 +3,7 @@ const OpenAI = require('openai');
 const cors = require('cors');
 const textToSpeech = require('@google-cloud/text-to-speech');
 const { getFirstQuestion, validateResponse, questions } = require('./utils/chat/questions');
+const twilioRoutes = require('./routes/twilio');
 require('dotenv').config();
 
 const app = express();
@@ -11,7 +12,11 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // Required for Twilio webhooks
 app.use(express.static('public'));
+
+// Twilio routes
+app.use('/twilio', twilioRoutes);
 
 // Initialize OpenAI
 const openai = new OpenAI({
