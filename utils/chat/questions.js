@@ -7,15 +7,21 @@ console.log('Environment variables loaded:', Object.keys(process.env));
 console.log('OPENAI_API_KEY exists:', !!process.env.OPENAI_API_KEY);
 console.log('OPENAI_API_KEY length:', process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0);
 
+const OpenAI = require('openai');
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
 // Question types
-export const QuestionType = {
+const QuestionType = {
   YES_NO: 'yes_no',
   NUMERIC: 'numeric',
   TEXT: 'text',
   VALIDATION: 'validation'
 };
 
-import { storeData } from './storeData';
+const { storeData } = require('./storeData');
 
 const YES_WORDS = ['yes', 'yeah', 'yep', 'yup', 'sure', 'okay', 'ok', 'correct', 'right', 'indeed', 'absolutely', 'definitely', 'certainly'];
 const NO_WORDS = ['no', 'nope', 'nah', 'negative', 'not', 'never', 'incorrect', 'wrong'];
@@ -29,7 +35,7 @@ const incrementRetryCount = (questionId) => retryCounts.set(questionId, getRetry
 const resetRetryCount = (questionId) => retryCounts.set(questionId, 0);
 
 // Question structure
-export const questions = [
+const questions = [
   {
     id: 1,
     text: `Are you a Sonic Franchise?`,
@@ -85,22 +91,21 @@ export const questions = [
       try {
         console.log('Extracting store number from user input:', response);
         
-        const apiResponse = await fetch('/api/openai', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            systemMessage: "You are a store number extractor. You must respond with either a store number or 'invalid'. A store number can be 4 digits (e.g., '2438','1214','9999'), or special formats (e.g., '000WH7', 'MCCA003','2005A'). If you can't find a valid store number, respond with 'invalid'. Do not include any other text in your response.",
-            prompt: `Analyze the user message and extract the store number from it if there is a possible store number. The store number could be 4 digits or a special format. If you can't find a valid store number, respond with 'invalid': "${response}"`
-          })
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4.1-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are a store number extractor. You must respond with either a store number or 'invalid'. A store number can be 4 digits (e.g., '2438','1214','9999'), or special formats (e.g., '000WH7', 'MCCA003','2005A'). If you can't find a valid store number, respond with 'invalid'. Do not include any other text in your response."
+            },
+            {
+              role: "user",
+              content: `Analyze the user message and extract the store number from it if there is a possible store number. The store number could be 4 digits or a special format. If you can't find a valid store number, respond with 'invalid': "${response}"`
+            }
+          ]
         });
 
-        if (!apiResponse.ok) {
-          throw new Error('Failed to extract store number');
-        }
-
-        const { result } = await apiResponse.json();
+        const result = completion.choices[0].message.content.trim();
         console.log('OpenAI extracted store number:', result);
         console.log('Original user input:', response);
         
@@ -121,18 +126,20 @@ export const questions = [
           };
         }
 
-        // Find the store in our data
-        const store = storeData.find(store => store.storeNumber === result);
+        // Find the store in our data using the extracted number
+        const store = storeData.find(store => 
+          store.storeNumber.toLowerCase() === result.toLowerCase()
+        );
         
         if (store) {
           // Reset retry count when valid store number is found
           resetRetryCount(2);
           return {
             isValid: true,
-            message: `Got it. So, your Sonic store number is ${result}. Your store, managed by ${store.storeOwner}, is located at ${store.storeAddress} ${store.storeZipCode}. Is it correct?`,
+            message: `Got it. So, your Sonic store number is ${store.storeNumber}. Your store, managed by ${store.storeOwner}, is located at ${store.storeAddress} ${store.storeZipCode}. Is it correct?`,
             nextQuestionId: 3,
             storeInfo: {
-              storeNumber: result,
+              storeNumber: store.storeNumber,
               storeOwner: store.storeOwner,
               storeAddress: store.storeAddress,
               storeZipCode: store.storeZipCode
@@ -224,22 +231,21 @@ export const questions = [
       try {
         console.log('Validating date input:', response);
         
-        const apiResponse = await fetch('/api/openai', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            systemMessage: "You are a date validator. You must respond with either 'valid' or 'invalid'. A valid date can be in any common format, for example: month and day (e.g., 'July 4th', 'June 5'), month-day-year (e.g., '6-5-2025', '06/05/2025'), or full date (e.g., 'June 5th, 2025'). Do not include any other text in your response.",
-            prompt: `Does this user message contain a valid date? The date should have at least a month and day, and optionally a year. Respond with only 'valid' or 'invalid': "${response}"`
-          })
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4.1-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are a date validator. You must respond with either 'valid' or 'invalid'. A valid date can be in any common format, for example: month and day (e.g., 'July 4th', 'June 5'), month-day-year (e.g., '6-5-2025', '06/05/2025'), or full date (e.g., 'June 5th, 2025'). Do not include any other text in your response."
+            },
+            {
+              role: "user",
+              content: `Does this user message contain a valid date? The date should have at least a month and day, and optionally a year. Respond with only 'valid' or 'invalid': "${response}"`
+            }
+          ]
         });
 
-        if (!apiResponse.ok) {
-          throw new Error('Failed to validate date');
-        }
-
-        const { result } = await apiResponse.json();
+        const result = completion.choices[0].message.content.trim();
         console.log('OpenAI response:', result);
         
         const isValid = result.toLowerCase() === "valid";
@@ -287,22 +293,21 @@ export const questions = [
       try {
         console.log('Validating incident description:', response);
         
-        const apiResponse = await fetch('/api/openai', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            systemMessage: "You are an incident validator for a fast food restaurant. You must respond with either 'valid' or 'invalid'. A valid incident is something that could reasonably occur in a fast food restaurant setting (e.g., slip and fall, food safety issues, customer complaints, equipment malfunction, etc.). Do not include any other text in your response.",
-            prompt: `Is this a valid incident that could occur in a fast food restaurant? Respond with only 'valid' or 'invalid': "${response}"`
-          })
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4.1-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are an incident validator for a fast food restaurant. You must respond with either 'valid' or 'invalid'. A valid incident is something that could reasonably occur in a fast food restaurant setting (e.g., slip and fall, food safety issues, customer complaints, equipment malfunction, etc.). Do not include any other text in your response."
+            },
+            {
+              role: "user",
+              content: `Is this a valid incident that could occur in a fast food restaurant? Respond with only 'valid' or 'invalid': "${response}"`
+            }
+          ]
         });
 
-        if (!apiResponse.ok) {
-          throw new Error('Failed to validate incident');
-        }
-
-        const { result } = await apiResponse.json();
+        const result = completion.choices[0].message.content.trim();
         console.log('OpenAI response:', result);
         
         const isValid = result.toLowerCase() === "valid";
@@ -395,22 +400,21 @@ export const questions = [
       try {
         console.log('Validating person name:', response);
         
-        const apiResponse = await fetch('/api/openai', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            systemMessage: "You are a name validator. You must respond with either 'valid' or 'invalid'. A valid name should be a reasonable human name (e.g., 'Jim', 'Lucy', 'Robert Johnson', 'John Smith', 'Maria Garcia'). Do not include any other text in your response.",
-            prompt: `Does this user message contain a valid name? Respond with only 'valid' or 'invalid': "${response}"`
-          })
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4.1-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are a name validator. You must respond with either 'valid' or 'invalid'. A valid name should be a reasonable human name (e.g., 'Jim', 'Lucy', 'Robert Johnson', 'John Smith', 'Maria Garcia'). Do not include any other text in your response."
+            },
+            {
+              role: "user",
+              content: `Does this user message contain a valid name? Respond with only 'valid' or 'invalid': "${response}"`
+            }
+          ]
         });
 
-        if (!apiResponse.ok) {
-          throw new Error('Failed to validate name');
-        }
-
-        const { result } = await apiResponse.json();
+        const result = completion.choices[0].message.content.trim();
         console.log('OpenAI response:', result);
         
         const isValid = result.toLowerCase() === "valid";
@@ -456,22 +460,21 @@ export const questions = [
       try {
         console.log('Validating phone number:', response);
         
-        const apiResponse = await fetch('/api/openai', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            systemMessage: "You are a phone number validator. You must respond with either 'valid' or 'invalid'. Do not include any other text in your response.",
-            prompt: `Does this user message contain a valid phone number? Respond with only 'valid' or 'invalid': "${response}"`
-          })
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4.1-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are a phone number validator. You must respond with either 'valid' or 'invalid'. Do not include any other text in your response."
+            },
+            {
+              role: "user",
+              content: `Does this user message contain a valid phone number? Respond with only 'valid' or 'invalid': "${response}"`
+            }
+          ]
         });
 
-        if (!apiResponse.ok) {
-          throw new Error('Failed to validate phone number');
-        }
-
-        const { result } = await apiResponse.json();
+        const result = completion.choices[0].message.content.trim();
         console.log('OpenAI response:', result);
         
         const isValid = result.toLowerCase() === "valid";
@@ -517,22 +520,21 @@ export const questions = [
       try {
         console.log('Validating address:', response);
         
-        const apiResponse = await fetch('/api/openai', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            systemMessage: "You are an address validator. You must respond with either 'valid' or 'invalid'. A valid address can be a full address (e.g., '123 Main St, City, State 12345'), a partial address with zip code, a common phrase like an address, or responses the user doesn't know the address. Do not include any other text in your response.",
-            prompt: `Does this message contain a valid address or a valid 'don't know' response? Respond with only 'valid' or 'invalid': "${response}"`
-          })
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4.1-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are an address validator. You must respond with either 'valid' or 'invalid'. A valid address can be a full address (e.g., '123 Main St, City, State 12345'), a partial address with zip code, a common phrase like an address, or responses the user doesn't know the address. Do not include any other text in your response."
+            },
+            {
+              role: "user",
+              content: `Does this message contain a valid address or a valid 'don't know' response? Respond with only 'valid' or 'invalid': "${response}"`
+            }
+          ]
         });
 
-        if (!apiResponse.ok) {
-          throw new Error('Failed to validate address');
-        }
-
-        const { result } = await apiResponse.json();
+        const result = completion.choices[0].message.content.trim();
         console.log('OpenAI response:', result);
         
         const isValid = result.toLowerCase() === "valid";
@@ -578,22 +580,21 @@ export const questions = [
       try {
         console.log('Validating contact name and phone:', response);
         
-        const apiResponse = await fetch('/api/openai', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            systemMessage: "You are a name and phone number validator. You must respond with either 'valid_name', 'valid_with_phone', or 'invalid'. A valid name should be a reasonable human name (e.g., 'Jim', 'Lucy', 'Robert Johnson'). A valid phone number should be in a common format (e.g., '123-456-7890', '(123) 456-7890', '1234567890'). If the input contains both a valid name and phone number, respond with 'valid_with_phone'. Do not include any other text in your response.",
-            prompt: `Does this user message contain a valid name and optionally a phone number? Respond with only 'valid_name', 'valid_with_phone', or 'invalid': "${response}"`
-          })
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4.1-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are a name and phone number validator. You must respond with either 'valid_name', 'valid_with_phone', or 'invalid'. A valid name should be a reasonable human name (e.g., 'Jim', 'Lucy', 'Robert Johnson'). A valid phone number should be in a common format (e.g., '123-456-7890', '(123) 456-7890', '1234567890'). If the input contains both a valid name and phone number, respond with 'valid_with_phone'. Do not include any other text in your response."
+            },
+            {
+              role: "user",
+              content: `Does this user message contain a valid name and optionally a phone number? Respond with only 'valid_name', 'valid_with_phone', or 'invalid': "${response}"`
+            }
+          ]
         });
 
-        if (!apiResponse.ok) {
-          throw new Error('Failed to validate name and phone');
-        }
-
-        const { result } = await apiResponse.json();
+        const result = completion.choices[0].message.content.trim();
         console.log('OpenAI response:', result);
         
         const responseType = result.toLowerCase();
@@ -648,22 +649,21 @@ export const questions = [
       try {
         console.log('Validating phone number:', response);
         
-        const apiResponse = await fetch('/api/openai', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            systemMessage: "You are a phone number validator. You must respond with either 'valid' or 'invalid'. Do not include any other text in your response.",
-            prompt: `Does this user message contain a valid phone number? Respond with only 'valid' or 'invalid': "${response}"`
-          })
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4.1-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are a phone number validator. You must respond with either 'valid' or 'invalid'. Do not include any other text in your response."
+            },
+            {
+              role: "user",
+              content: `Does this user message contain a valid phone number? Respond with only 'valid' or 'invalid': "${response}"`
+            }
+          ]
         });
 
-        if (!apiResponse.ok) {
-          throw new Error('Failed to validate phone number');
-        }
-
-        const { result } = await apiResponse.json();
+        const result = completion.choices[0].message.content.trim();
         console.log('OpenAI response:', result);
         
         const isValid = result.toLowerCase() === "valid";
@@ -707,7 +707,7 @@ export const questions = [
 ];
 
 // Helper function to get the next question
-export const getNextQuestion = (currentQuestionId, nextQuestionId) => {
+const getNextQuestion = (currentQuestionId, nextQuestionId) => {
   if (nextQuestionId) {
     return questions.find(q => q.id === nextQuestionId) || null;
   }
@@ -716,11 +716,19 @@ export const getNextQuestion = (currentQuestionId, nextQuestionId) => {
 };
 
 // Helper function to get the first question
-export const getFirstQuestion = () => questions[0];
+const getFirstQuestion = () => questions[0];
 
 // Helper function to validate a response
-export const validateResponse = (questionId, response, storeInfo = null) => {
+const validateResponse = (questionId, response, storeInfo = null) => {
   const question = questions.find(q => q.id === questionId);
   if (!question) return { isValid: false, message: "Invalid question." };
   return question.validate(response, storeInfo);
+};
+
+module.exports = {
+  QuestionType,
+  questions,
+  getNextQuestion,
+  getFirstQuestion,
+  validateResponse
 }; 
