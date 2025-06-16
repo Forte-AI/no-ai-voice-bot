@@ -104,6 +104,8 @@ app.post('/api/chat', async (req, res) => {
 app.post('/api/text-to-speech', async (req, res) => {
   try {
     const { input, voice, audioConfig } = req.body;
+    console.log('TTS Request received with body:', req.body);
+    console.log('TTS Client initialized:', !!ttsClient);
 
     const request = {
       input,
@@ -111,12 +113,34 @@ app.post('/api/text-to-speech', async (req, res) => {
       audioConfig
     };
 
+    console.log('Sending request to Google TTS with config:', JSON.stringify(request, null, 2));
     const [response] = await ttsClient.synthesizeSpeech(request);
+    console.log('Received response from Google TTS, audio content length:', response?.audioContent?.length);
+    
+    if (!response || !response.audioContent) {
+      console.error('Invalid response from Google TTS:', response);
+      throw new Error('Invalid response from Google TTS');
+    }
+
     res.set('Content-Type', 'audio/mpeg');
     res.send(response.audioContent);
   } catch (error) {
     console.error('Error with text-to-speech:', error);
-    res.status(500).json({ error: 'Error processing text-to-speech request' });
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack,
+      credentials: {
+        hasBase64: !!process.env.GOOGLE_CREDENTIALS_BASE64,
+        hasProjectId: !!process.env.GOOGLE_PROJECT_ID,
+        hasPrivateKey: !!process.env.GOOGLE_PRIVATE_KEY,
+        hasClientEmail: !!process.env.GOOGLE_CLIENT_EMAIL
+      }
+    });
+    res.status(500).json({ 
+      error: 'Error processing text-to-speech request',
+      details: error.message 
+    });
   }
 });
 
