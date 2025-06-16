@@ -3,51 +3,114 @@ const { useState, useRef, useEffect } = React;
 function ChatInterface() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const recognitionRef = useRef(null);
   const [isListening, setIsListening] = useState(false);
   const [sessionId] = useState(() => Math.random().toString(36).substring(7));
   const [isEnded, setIsEnded] = useState(false);
   const [isStarted, setIsStarted] = useState(false);
   const [speechError, setSpeechError] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
-  useEffect(() => {
-    // Initialize speech recognition
-    if ('webkitSpeechRecognition' in window) {
-      recognitionRef.current = new webkitSpeechRecognition();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = 'en-US';
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          channelCount: 1,
+          sampleRate: 48000,
+          sampleSize: 16,
+          volume: 1.0
+        } 
+      });
+      
+      mediaRecorderRef.current = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus',
+        audioBitsPerSecond: 48000
+      });
+      
+      audioChunksRef.current = [];
 
-      recognitionRef.current.onstart = () => {
-        setIsListening(true);
-        setSpeechError(null);
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
       };
 
-      recognitionRef.current.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        handleUserInput(transcript);
-      };
+      mediaRecorderRef.current.onstop = async () => {
+        if (audioChunksRef.current.length === 0) {
+          console.log('No audio data recorded');
+          return;
+        }
 
-      recognitionRef.current.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setSpeechError(event.error);
-        setIsListening(false);
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
         
-        // Show error message to user
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: 'Sorry, I had trouble understanding you. Please try speaking again or type your message.' 
-        }]);
+        reader.onloadend = async () => {
+          try {
+            console.log('Sending audio data to server');
+            const response = await fetch('/api/speech-to-text', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                audio: reader.result
+              })
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.details || 'Failed to process speech');
+            }
+
+            const data = await response.json();
+            if (data.text) {
+              handleUserInput(data.text);
+            } else {
+              throw new Error('No transcription received');
+            }
+          } catch (error) {
+            console.error('Error processing speech:', error);
+            setSpeechError('Failed to process speech. Please try again.');
+          }
+        };
+
+        reader.readAsDataURL(audioBlob);
       };
 
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-      };
-    } else {
-      setSpeechError('Speech recognition is not supported in your browser. Please use Chrome or Edge.');
+      // Start recording with a 1-second interval for data chunks
+      mediaRecorderRef.current.start(1000);
+      setIsListening(true);
+      setSpeechError(null);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      setSpeechError('Failed to access microphone. Please check your permissions.');
     }
-  }, []);
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isListening) {
+      try {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+        setIsListening(false);
+      } catch (error) {
+        console.error('Error stopping recording:', error);
+        setSpeechError('Error stopping recording. Please try again.');
+      }
+    }
+  };
+
+  const toggleListening = () => {
+    if (isEnded || !isStarted || isProcessing) return;
+    
+    if (isListening) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
 
   const startChat = async () => {
     setIsStarted(true);
@@ -166,16 +229,9 @@ function ChatInterface() {
       
       audio.onended = () => {
         if (!isEnded) {
+          // Start recording after a short delay
           setTimeout(() => {
-            if (recognitionRef.current) {
-              try {
-                recognitionRef.current.start();
-                setIsListening(true);
-              } catch (error) {
-                console.error('Error starting speech recognition:', error);
-                setSpeechError('Failed to start listening. Please try clicking the Speak button again.');
-              }
-            }
+            startRecording();
           }, 500);
         }
       };
@@ -195,22 +251,6 @@ function ChatInterface() {
         role: 'assistant', 
         content: 'Sorry, there was an error with the voice response. Please continue with text input.' 
       }]);
-    }
-  };
-
-  const toggleListening = () => {
-    if (isEnded || !isStarted || isProcessing) return;
-    
-    if (isListening) {
-      recognitionRef.current.stop();
-    } else {
-      try {
-        recognitionRef.current.start();
-        setIsListening(true);
-      } catch (error) {
-        console.error('Error starting speech recognition:', error);
-        setSpeechError('Failed to start listening. Please try again.');
-      }
     }
   };
 
