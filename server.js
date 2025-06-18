@@ -3,7 +3,7 @@ const OpenAI = require('openai');
 const cors = require('cors');
 const textToSpeech = require('@google-cloud/text-to-speech');
 const speech = require('@google-cloud/speech');
-const { getFirstQuestion, validateResponse, questions } = require('./utils/chat/questions');
+const { getFirstQuestion, validateResponse, questions, resetAllRetryCounts } = require('./utils/chat/questions');
 const twilioRoutes = require('./routes/twilio');
 const path = require('path');
 const os = require('os');
@@ -298,6 +298,11 @@ app.get('/api/current-question', (req, res) => {
   res.json({
     talkingTime: currentQuestion.talkingTime || 10 // Default to 10 seconds if not specified
   });
+});
+
+app.post('/api/reset-session', (req, res) => {
+  resetAllRetryCounts();
+  res.json({ success: true });
 });
 
 // Serve index.html for all other routes

@@ -4,7 +4,7 @@ function ChatInterface() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
-  const [sessionId] = useState(() => Math.random().toString(36).substring(7));
+  const [sessionId, setSessionId] = useState(() => Math.random().toString(36).substring(7));
   const [isEnded, setIsEnded] = useState(false);
   const [isStarted, setIsStarted] = useState(false);
   const [speechError, setSpeechError] = useState(null);
@@ -13,6 +13,7 @@ function ChatInterface() {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const streamRef = useRef(null);
+  const audioRef = useRef(null);
 
   const cleanupRecording = () => {
     if (mediaRecorderRef.current) {
@@ -38,10 +39,28 @@ function ChatInterface() {
   useEffect(() => {
     return () => {
       cleanupRecording();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current = null;
+      }
     };
   }, []);
 
+  useEffect(() => {
+    if (isEnded) {
+      cleanupRecording();
+      setIsListening(false);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current = null;
+      }
+    }
+  }, [isEnded]);
+
   const startRecording = async () => {
+    if (isEnded) return;
     try {
       cleanupRecording();
 
@@ -237,6 +256,7 @@ function ChatInterface() {
   };
 
   const handleUserInput = async (text, bypassChecks = false) => {
+    if (isEnded) return;
     console.log('handleUserInput called with:', text, 'isStarted:', isStarted, 'isEnded:', isEnded, 'bypassChecks:', bypassChecks);
     if (!bypassChecks && (!text.trim() || isEnded || !isStarted)) return;
     setIsProcessing(true);
@@ -256,9 +276,10 @@ function ChatInterface() {
       const data = await response.json();
       if (data.message) {
         setMessages(prev => [...prev, { role: 'assistant', content: data.message }]);
-        await speakText(data.message);
         if (data.endChat) {
-          setIsEnded(true);
+          await speakText(data.message, () => setIsEnded(true));
+        } else {
+          await speakText(data.message);
         }
       }
     } catch (error) {
@@ -272,7 +293,8 @@ function ChatInterface() {
     }
   };
 
-  const speakText = async (text) => {
+  const speakText = async (text, onEnd) => {
+    if (isEnded) return;
     try {
       console.log('Sending text to TTS for session:', sessionId);
       const audioRes = await fetch('/api/text-to-speech', {
@@ -300,41 +322,69 @@ function ChatInterface() {
       if (!audioRes.ok) {
         const errorData = await audioRes.json();
         console.error('TTS Error:', errorData);
-        // Instead of throwing error, send empty message
-        handleUserInput(' ', true);
+        if (!isEnded) handleUserInput(' ', true);
         return;
       }
 
       const blob = await audioRes.blob();
       if (blob.size === 0) {
         console.error('Received empty audio response');
-        // Instead of throwing error, send empty message
-        handleUserInput(' ', true);
+        if (!isEnded) handleUserInput(' ', true);
         return;
       }
 
       console.log('Received audio blob:', blob.size, 'bytes');
       const audio = new Audio(URL.createObjectURL(blob));
+      audioRef.current = audio;
       
       audio.onended = () => {
-        if (!isEnded) {
+        if (typeof onEnd === 'function') {
+          onEnd();
+        } else if (!isEnded) {
           setTimeout(() => {
-            startRecording();
+            if (!isEnded) {
+              startRecording();
+            }
           }, 500);
         }
       };
 
       audio.onerror = (error) => {
         console.error('Audio playback error:', error);
-        // Instead of showing error message, send empty message
-        handleUserInput(' ', true);
+        if (!isEnded) handleUserInput(' ', true);
       };
       
       await audio.play();
     } catch (err) {
       console.error('Error in speakText:', err);
-      // Instead of showing error message, send empty message
-      handleUserInput(' ', true);
+      if (!isEnded) handleUserInput(' ', true);
+    }
+  };
+
+  const resetChat = async () => {
+    setMessages([]);
+    setInput('');
+    setIsListening(false);
+    setIsEnded(false);
+    setIsStarted(false);
+    setSpeechError(null);
+    setIsProcessing(false);
+    setSessionId(Math.random().toString(36).substring(7));
+    cleanupRecording();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    // Call backend to reset session state
+    try {
+      await fetch('/api/reset-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+      });
+    } catch (err) {
+      console.error('Failed to reset backend session:', err);
     }
   };
 
@@ -345,7 +395,10 @@ function ChatInterface() {
           <h1>Welcome to the Sonic Claims Assistant</h1>
           <p>Click the button below to start your claim process</p>
           <button 
-            onClick={startChat}
+            onClick={async () => {
+              await resetChat();
+              startChat();
+            }}
             className="start-button"
             disabled={isProcessing}
           >
@@ -367,6 +420,11 @@ function ChatInterface() {
         {speechError && (
           <div className="message error">
             {speechError}
+          </div>
+        )}
+        {isEnded && (
+          <div className="message ended">
+            Chat session has ended. Thank you!
           </div>
         )}
       </div>

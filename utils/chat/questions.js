@@ -741,10 +741,15 @@ const validateResponse = (questionId, response, storeInfo = null) => {
   return question.validate(response, storeInfo);
 };
 
+function resetAllRetryCounts() {
+  retryCounts.clear();
+}
+
 module.exports = {
   QuestionType,
   questions,
   getNextQuestion,
   getFirstQuestion,
-  validateResponse
+  validateResponse,
+  resetAllRetryCounts
 }; 
