@@ -34,6 +34,11 @@ const getRetryCount = (questionId) => retryCounts.get(questionId) || 0;
 const incrementRetryCount = (questionId) => retryCounts.set(questionId, getRetryCount(questionId) + 1);
 const resetRetryCount = (questionId) => retryCounts.set(questionId, 0);
 
+// Helper to format store number for TTS (e.g., 1234 -> 1 2 3 4)
+function formatStoreNumberForTTS(storeNumber) {
+  return storeNumber.split('').join(' ');
+}
+
 // Question structure
 const questions = [
   {
@@ -85,7 +90,7 @@ const questions = [
       if (storeInfo) {
         return {
           isValid: true,
-          message: `Got it. So, your Sonic store number is ${storeInfo.storeNumber}. Your store, managed by ${storeInfo.storeOwner}, is located at ${storeInfo.storeAddress} ${storeInfo.storeZipCode}. Is it correct?`,
+          message: `Got it. So, your Sonic store number is ${formatStoreNumberForTTS(storeInfo.storeNumber)}. Your store, managed by ${storeInfo.storeOwner}, is located at ${storeInfo.storeAddress} ${storeInfo.storeZipCode}. Is it correct?`,
           nextQuestionId: 3
         };
       }
@@ -138,7 +143,7 @@ const questions = [
           resetRetryCount(2);
           return {
             isValid: true,
-            message: `Got it. So, your Sonic store number is ${store.storeNumber}. Your store, managed by ${store.storeOwner}, is located at ${store.storeAddress} ${store.storeZipCode}. Is it correct?`,
+            message: `Got it. So, your Sonic store number is ${formatStoreNumberForTTS(store.storeNumber)}. Your store, managed by ${store.storeOwner}, is located at ${store.storeAddress} ${store.storeZipCode}. Is it correct?`,
             nextQuestionId: 3,
             storeInfo: {
               storeNumber: store.storeNumber,
