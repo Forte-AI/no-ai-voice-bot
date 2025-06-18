@@ -48,7 +48,7 @@ function ChatInterface() {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           channelCount: 1,
-          sampleRate: 48000,
+          sampleRate: 16000,
           sampleSize: 16,
           volume: 1.0
         } 
@@ -57,7 +57,7 @@ function ChatInterface() {
       streamRef.current = stream;
       mediaRecorderRef.current = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus',
-        audioBitsPerSecond: 48000
+        audioBitsPerSecond: 16000
       });
       
       audioChunksRef.current = [];
@@ -71,6 +71,7 @@ function ChatInterface() {
       mediaRecorderRef.current.onstop = async () => {
         if (audioChunksRef.current.length === 0) {
           console.log('No audio data recorded');
+          setIsListening(false);
           return;
         }
 
@@ -97,23 +98,79 @@ function ChatInterface() {
             }
 
             const data = await response.json();
-            if (data.text) {
-              handleUserInput(data.text);
+            // If no transcription received or empty transcription, treat it as an empty message
+            if (!data.text || data.text.trim() === '') {
+              console.log('No transcription received, treating as empty message');
+              handleUserInput(' ', true);
             } else {
-              throw new Error('No transcription received');
+              handleUserInput(data.text, true);
             }
           } catch (error) {
             console.error('Error processing speech:', error);
-            setSpeechError('Failed to process speech. Please try again.');
+            // On error, treat it as an empty message to trigger retry logic
+            console.log('Error in speech processing, treating as empty message');
+            handleUserInput(' ', true);
+          } finally {
+            setIsListening(false);
+            cleanupRecording();
           }
         };
 
         reader.readAsDataURL(audioBlob);
       };
 
-      mediaRecorderRef.current.start(1000);
-      setIsListening(true);
-      setSpeechError(null);
+      // Get the current question's talking time from the server
+      try {
+        const response = await fetch(`/api/current-question?sessionId=${sessionId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const talkingTime = data.talkingTime || 10; // Default to 10 seconds if not specified
+          console.log('Setting talking time to:', talkingTime, 'seconds');
+          
+          // Clear any existing timeout
+          if (mediaRecorderRef.current.silenceTimeout) {
+            clearTimeout(mediaRecorderRef.current.silenceTimeout);
+          }
+          
+          // Start recording
+          mediaRecorderRef.current.start(1000);
+          setIsListening(true);
+          setSpeechError(null);
+          
+          // Set new timeout
+          mediaRecorderRef.current.silenceTimeout = setTimeout(() => {
+            console.log('Talking time limit reached:', talkingTime, 'seconds');
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+              mediaRecorderRef.current.stop();
+            }
+          }, talkingTime * 1000);
+        }
+      } catch (error) {
+        console.error('Error getting question talking time:', error);
+        // Fallback to default 10 seconds if there's an error
+        mediaRecorderRef.current.start(1000);
+        setIsListening(true);
+        setSpeechError(null);
+        
+        // Clear any existing timeout
+        if (mediaRecorderRef.current.silenceTimeout) {
+          clearTimeout(mediaRecorderRef.current.silenceTimeout);
+        }
+        
+        // Set fallback timeout
+        mediaRecorderRef.current.silenceTimeout = setTimeout(() => {
+          console.log('Fallback talking time limit reached: 10 seconds');
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+          }
+        }, 10000);
+      }
     } catch (error) {
       console.error('Error starting recording:', error);
       setSpeechError('Failed to access microphone. Please check your permissions.');
@@ -123,10 +180,16 @@ function ChatInterface() {
   const stopRecording = () => {
     if (mediaRecorderRef.current && isListening) {
       try {
+        // Clear the auto-stop timeout if it exists
+        if (mediaRecorderRef.current.silenceTimeout) {
+          clearTimeout(mediaRecorderRef.current.silenceTimeout);
+        }
         mediaRecorderRef.current.stop();
       } catch (error) {
         console.error('Error stopping recording:', error);
         setSpeechError('Error stopping recording. Please try again.');
+        setIsListening(false);
+        cleanupRecording();
       }
     }
   };
@@ -173,13 +236,12 @@ function ChatInterface() {
     }
   };
 
-  const handleUserInput = async (text) => {
-    if (!text.trim() || isEnded || !isStarted) return;
-
+  const handleUserInput = async (text, bypassChecks = false) => {
+    console.log('handleUserInput called with:', text, 'isStarted:', isStarted, 'isEnded:', isEnded, 'bypassChecks:', bypassChecks);
+    if (!bypassChecks && (!text.trim() || isEnded || !isStarted)) return;
     setIsProcessing(true);
     setMessages(prev => [...prev, { role: 'user', content: text }]);
     setInput('');
-
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -191,14 +253,10 @@ function ChatInterface() {
           sessionId
         })
       });
-
       const data = await response.json();
-      
       if (data.message) {
         setMessages(prev => [...prev, { role: 'assistant', content: data.message }]);
-        
         await speakText(data.message);
-        
         if (data.endChat) {
           setIsEnded(true);
         }
@@ -242,12 +300,17 @@ function ChatInterface() {
       if (!audioRes.ok) {
         const errorData = await audioRes.json();
         console.error('TTS Error:', errorData);
-        throw new Error(errorData.details || 'Failed to generate speech');
+        // Instead of throwing error, send empty message
+        handleUserInput(' ', true);
+        return;
       }
 
       const blob = await audioRes.blob();
       if (blob.size === 0) {
-        throw new Error('Received empty audio response');
+        console.error('Received empty audio response');
+        // Instead of throwing error, send empty message
+        handleUserInput(' ', true);
+        return;
       }
 
       console.log('Received audio blob:', blob.size, 'bytes');
@@ -263,19 +326,15 @@ function ChatInterface() {
 
       audio.onerror = (error) => {
         console.error('Audio playback error:', error);
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: 'Sorry, there was an error playing the voice response. Please continue with text input.' 
-        }]);
+        // Instead of showing error message, send empty message
+        handleUserInput(' ', true);
       };
       
       await audio.play();
     } catch (err) {
       console.error('Error in speakText:', err);
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Sorry, there was an error with the voice response. Please continue with text input.' 
-      }]);
+      // Instead of showing error message, send empty message
+      handleUserInput(' ', true);
     }
   };
 

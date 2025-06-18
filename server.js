@@ -102,45 +102,50 @@ app.post('/api/speech-to-text', async (req, res) => {
 
     console.log('Received audio data for session:', sessionId, 'length:', req.body.audio.length);
     
-    // Convert base64 audio to buffer
-    const audioBuffer = Buffer.from(req.body.audio.split(',')[1], 'base64');
-    console.log('Converted audio buffer size:', audioBuffer.length);
+    // Extract base64 data from data URL
+    const base64Data = req.body.audio.split(',')[1];
+    if (!base64Data) {
+      throw new Error('Invalid audio data format');
+    }
     
+    // Detect file type from data URL or session
+    let encoding = 'WEBM_OPUS';
+    let sampleRateHertz = 48000;
+    if (req.body.audio.startsWith('data:audio/wav')) {
+      encoding = 'LINEAR16'; // Google expects LINEAR16 for WAV
+      sampleRateHertz = 24000;
+    }
+    // Convert base64 audio to buffer
+    const audioBuffer = Buffer.from(base64Data, 'base64');
+    console.log('Converted audio buffer size:', audioBuffer.length);
     // Create a temporary file with session ID
-    const tempFile = path.join(os.tmpdir(), `web-recording-${sessionId}-${Date.now()}.webm`);
+    const tempFile = path.join(os.tmpdir(), `web-recording-${sessionId}-${Date.now()}.${encoding === 'LINEAR16' ? 'wav' : 'webm'}`);
     fs.writeFileSync(tempFile, audioBuffer);
     console.log('Created temporary file:', tempFile);
-
     try {
       // Read the file
       const audioBytes = fs.readFileSync(tempFile).toString('base64');
       console.log('Read audio file, base64 length:', audioBytes.length);
-      
       // Configure the request
       const audio = {
         content: audioBytes
       };
-      
       const config = {
-        encoding: 'WEBM_OPUS',
-        sampleRateHertz: 48000,
+        encoding: encoding,
+        sampleRateHertz: sampleRateHertz,
         languageCode: 'en-US',
       };
-      
       const request = {
         audio: audio,
         config: config,
       };
-      
       console.log('Sending request to Google Speech-to-Text for session:', sessionId);
       // Perform the transcription
       const [response] = await speechClient.recognize(request);
       console.log('Received response from Google Speech-to-Text for session:', sessionId);
-      
       const transcription = response.results
         .map(result => result.alternatives[0].transcript)
         .join('\n');
-      
       console.log('Transcription result for session:', sessionId, ':', transcription);
       res.json({ text: transcription });
     } finally {
@@ -273,11 +278,35 @@ app.post('/api/text-to-speech', async (req, res) => {
   }
 });
 
+// Add endpoint to get current question's talking time
+app.get('/api/current-question', (req, res) => {
+  const sessionId = req.query.sessionId;
+  if (!sessionId) {
+    return res.status(400).json({ error: 'Session ID is required' });
+  }
+
+  const session = chatSessions.get(sessionId);
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+
+  const currentQuestion = questions.find(q => q.id === session.currentQuestion.id);
+  if (!currentQuestion) {
+    return res.status(404).json({ error: 'Question not found' });
+  }
+
+  res.json({
+    talkingTime: currentQuestion.talkingTime || 10 // Default to 10 seconds if not specified
+  });
+});
+
 // Serve index.html for all other routes
 app.get('*', (req, res) => {
   res.sendFile(__dirname + '/public/index.html');
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
-}); 
+});
+
+module.exports = server; 

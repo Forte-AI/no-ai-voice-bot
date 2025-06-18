@@ -40,6 +40,7 @@ const questions = [
     id: 1,
     text: `Are you a Sonic Franchise?`,
     type: QuestionType.YES_NO,
+    talkingTime: 3, // Short time for yes/no question
     validate: (response) => {
       const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
       const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
@@ -78,6 +79,7 @@ const questions = [
   {
     id: 2,
     type: QuestionType.TEXT,
+    talkingTime: 8, // Longer time for store number input
     validate: async (response, storeInfo = null) => {
       // If we have store info from a previous validation, use it
       if (storeInfo) {
@@ -189,6 +191,7 @@ const questions = [
   {
     id: 3,
     type: QuestionType.YES_NO,
+    talkingTime: 5, // Short time for yes/no question
     validate: (response, storeInfo) => {
       const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
       const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
@@ -227,6 +230,7 @@ const questions = [
   {
     id: 4,
     type: QuestionType.TEXT,
+    talkingTime: 10, // Default time for date input
     validate: async (response) => {
       try {
         console.log('Validating date input:', response);
@@ -289,6 +293,7 @@ const questions = [
   {
     id: 5,
     type: QuestionType.TEXT,
+    talkingTime: 20, // Longer time for incident description
     validate: async (response) => {
       try {
         console.log('Validating incident description:', response);
@@ -365,6 +370,7 @@ const questions = [
   {
     id: 6,
     type: QuestionType.YES_NO,
+    talkingTime: 5, // Short time for yes/no question
     validate: (response) => {
       const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
       const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
@@ -396,6 +402,7 @@ const questions = [
   {
     id: 7,
     type: QuestionType.TEXT,
+    talkingTime: 10, // Default time for name input
     validate: async (response) => {
       try {
         console.log('Validating person name:', response);
@@ -456,6 +463,7 @@ const questions = [
   {
     id: 8,
     type: QuestionType.TEXT,
+    talkingTime: 10, // Default time for phone number
     validate: async (response) => {
       try {
         console.log('Validating phone number:', response);
@@ -516,6 +524,7 @@ const questions = [
   {
     id: 9,
     type: QuestionType.TEXT,
+    talkingTime: 15, // Longer time for address input
     validate: async (response) => {
       try {
         console.log('Validating address:', response);
@@ -576,6 +585,7 @@ const questions = [
   {
     id: 10,
     type: QuestionType.TEXT,
+    talkingTime: 15, // Longer time for contact info
     validate: async (response) => {
       try {
         console.log('Validating contact name and phone:', response);
@@ -645,6 +655,7 @@ const questions = [
   {
     id: 11,
     type: QuestionType.TEXT,
+    talkingTime: 10, // Default time for phone number
     validate: async (response) => {
       try {
         console.log('Validating phone number:', response);
