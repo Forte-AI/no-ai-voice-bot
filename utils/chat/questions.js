@@ -191,7 +191,7 @@ const questions = [
   {
     id: 3,
     type: QuestionType.YES_NO,
-    talkingTime: 5, // Short time for yes/no question
+    talkingTime: 3, // Short time for yes/no question
     validate: (response, storeInfo) => {
       const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
       const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
@@ -230,7 +230,7 @@ const questions = [
   {
     id: 4,
     type: QuestionType.TEXT,
-    talkingTime: 10, // Default time for date input
+    talkingTime: 8, // Default time for date input
     validate: async (response) => {
       try {
         console.log('Validating date input:', response);
@@ -293,7 +293,7 @@ const questions = [
   {
     id: 5,
     type: QuestionType.TEXT,
-    talkingTime: 20, // Longer time for incident description
+    talkingTime: 15, // Longer time for incident description
     validate: async (response) => {
       try {
         console.log('Validating incident description:', response);
@@ -370,7 +370,7 @@ const questions = [
   {
     id: 6,
     type: QuestionType.YES_NO,
-    talkingTime: 5, // Short time for yes/no question
+    talkingTime: 3, // Short time for yes/no question
     validate: (response) => {
       const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
       const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
@@ -524,7 +524,7 @@ const questions = [
   {
     id: 9,
     type: QuestionType.TEXT,
-    talkingTime: 15, // Longer time for address input
+    talkingTime: 10, // Longer time for address input
     validate: async (response) => {
       try {
         console.log('Validating address:', response);
@@ -585,7 +585,7 @@ const questions = [
   {
     id: 10,
     type: QuestionType.TEXT,
-    talkingTime: 15, // Longer time for contact info
+    talkingTime: 10, // Longer time for contact info
     validate: async (response) => {
       try {
         console.log('Validating contact name and phone:', response);
