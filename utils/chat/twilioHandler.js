@@ -121,11 +121,23 @@ const handleRecordingStatus = async (req, res) => {
   // Process the recording asynchronously
   try {
     console.log('Processing recording asynchronously...');
+    console.log('Recording URL for transcription:', recordingUrl);
+    
     const transcription = await transcribeAudio(recordingUrl);
     console.log('Transcription result:', transcription);
     
     if (!transcription || transcription.trim() === '') {
       console.log('Empty transcription, will ask user to repeat on next interaction');
+      // Store a retry message for the next interaction
+      const session = callSessions.get(callSid);
+      if (session) {
+        session.lastResponse = {
+          message: "I didn't catch that. Could you please repeat your answer?",
+          endChat: false,
+          retry: true
+        };
+        console.log('Stored retry message for next interaction');
+      }
       return;
     }
     
@@ -134,6 +146,16 @@ const handleRecordingStatus = async (req, res) => {
     
   } catch (error) {
     console.error('Error processing recording:', error);
+    // Store an error message for the next interaction
+    const session = callSessions.get(callSid);
+    if (session) {
+      session.lastResponse = {
+        message: "I'm sorry, there was an error processing your response. Please try again.",
+        endChat: false,
+        retry: true
+      };
+      console.log('Stored error message for next interaction');
+    }
   }
 };
 

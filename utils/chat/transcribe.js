@@ -89,19 +89,19 @@ async function transcribeAudio(recordingUri) {
       return '';
     }
     
-    // Configure the request - try different settings for phone calls
+    // Configure the request - use the same settings as web version
     const audio = {
       content: audioBytes
     };
     
-    // Phone calls typically use different settings than web audio
+    // Use the same configuration as the web version for better compatibility
     const config = {
       encoding: 'MP3',
-      sampleRateHertz: 8000, // Phone calls are typically 8kHz
+      sampleRateHertz: 16000, // Use 16kHz like web version instead of 8kHz
       languageCode: 'en-US',
       enableAutomaticPunctuation: true,
       enableWordTimeOffsets: false,
-      model: 'phone_call', // Use phone call model for better accuracy
+      model: 'phone_call', // Keep phone call model for better accuracy
       useEnhanced: true // Use enhanced model for better accuracy
     };
     
@@ -136,15 +136,16 @@ async function transcribeAudio(recordingUri) {
       recordingUri: recordingUri
     });
     
-    // Try fallback configuration for phone calls
+    // Try fallback configuration similar to web version
     if (error.message.includes('encoding') || error.message.includes('sampleRate')) {
-      console.log('Trying fallback configuration for phone calls...');
+      console.log('Trying fallback configuration similar to web version...');
       try {
         const audioBytes = fs.readFileSync(tempFile).toString('base64');
         const fallbackConfig = {
           encoding: 'MP3',
-          sampleRateHertz: 16000, // Try higher sample rate
+          sampleRateHertz: 24000, // Try 24kHz like web version
           languageCode: 'en-US',
+          enableAutomaticPunctuation: true
         };
         
         const fallbackRequest = {
