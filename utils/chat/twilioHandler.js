@@ -101,21 +101,65 @@ const handleIncomingCall = async (req, res) => {
 const handleVoiceResponse = async (req, res) => {
   const callSid = req.body.CallSid;
   const recordingSid = req.body.RecordingSid;
+  const recordingDuration = req.body.RecordingDuration;
   const twiml = new twilio.twiml.VoiceResponse();
   
   console.log('Handling voice response:', {
     callSid,
     recordingSid,
+    recordingDuration,
     body: req.body
   });
+  
+  // Check if this is a test call (fake recording SID)
+  const isTestCall = recordingSid && recordingSid.startsWith('REtest');
+  
+  if (isTestCall) {
+    console.log('Detected test call, skipping recording fetch');
+    twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "This is a test call. In a real call, I would process your response.");
+    twiml.hangup();
+    res.type('text/xml');
+    res.send(twiml.toString());
+    return;
+  }
+  
+  // Check if there's no recording or recording duration is 0
+  if (!recordingSid || recordingDuration === '0' || recordingDuration === '0.0') {
+    console.log('No recording available, asking user to repeat');
+    twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I didn't catch that. Could you please repeat your answer?");
+    
+    // Get current session first
+    const session = callSessions.get(callSid);
+    if (!session) {
+      console.log('No session found for no recording');
+      twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error with your call. Please try again later.");
+      res.type('text/xml');
+      res.send(twiml.toString());
+      return;
+    }
+    
+    // Use current question's talking time for retry
+    const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
+    const maxLength = currentQuestion ? (currentQuestion.talkingTime || 30) : 30;
+    
+    twiml.record({
+      action: `/twilio/response?callSid=${callSid}`,
+      maxLength: maxLength,
+      playBeep: false,
+      trim: 'trim-silence'
+    });
+    res.type('text/xml');
+    res.send(twiml.toString());
+    return;
+  }
   
   try {
     // Get the recording and wait for it to be ready
     console.log('Fetching recording from Twilio...');
     let recording;
     let retryCount = 0;
-    const maxRetries = 10;
-    const retryDelay = 3000;
+    const maxRetries = 10; // Increased from 5 to 10
+    const retryDelay = 3000; // Increased from 2000 to 3000ms
     
     while (retryCount < maxRetries) {
       try {
