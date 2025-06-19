@@ -60,22 +60,30 @@ async function transcribeAudio(recordingUri) {
     const mediaUrl = recordingUri.replace('.json', '.mp3');
     
     console.log('Downloading recording from:', mediaUrl);
+    console.log('Recording URI:', recordingUri);
+    
     // Download the recording from Twilio
     await downloadFile(mediaUrl, tempFile);
     
     console.log('Reading audio file from:', tempFile);
     // Read the file
     const audioBytes = fs.readFileSync(tempFile).toString('base64');
+    console.log('Audio file size:', audioBytes.length, 'characters');
     
-    // Configure the request
+    // Configure the request - try different settings for phone calls
     const audio = {
       content: audioBytes
     };
     
+    // Phone calls typically use different settings than web audio
     const config = {
       encoding: 'MP3',
-      sampleRateHertz: 8000,
+      sampleRateHertz: 8000, // Phone calls are typically 8kHz
       languageCode: 'en-US',
+      enableAutomaticPunctuation: true,
+      enableWordTimeOffsets: false,
+      model: 'phone_call', // Use phone call model for better accuracy
+      useEnhanced: true // Use enhanced model for better accuracy
     };
     
     const request = {
@@ -83,22 +91,61 @@ async function transcribeAudio(recordingUri) {
       config: config,
     };
     
-    console.log('Sending request to Google Speech-to-Text');
+    console.log('Sending request to Google Speech-to-Text with config:', config);
     // Perform the transcription
     const [response] = await speechClient.recognize(request);
+    
+    if (!response.results || response.results.length === 0) {
+      console.log('No transcription results returned');
+      return '';
+    }
+    
     const transcription = response.results
       .map(result => result.alternatives[0].transcript)
       .join('\n');
     
     console.log('Transcription successful:', transcription);
+    console.log('Confidence scores:', response.results.map(r => r.alternatives[0].confidence));
+    
     return transcription;
   } catch (error) {
     console.error('Error in transcribeAudio:', error);
     console.error('Error details:', {
       message: error.message,
       code: error.code,
-      stack: error.stack
+      stack: error.stack,
+      recordingUri: recordingUri
     });
+    
+    // Try fallback configuration for phone calls
+    if (error.message.includes('encoding') || error.message.includes('sampleRate')) {
+      console.log('Trying fallback configuration for phone calls...');
+      try {
+        const audioBytes = fs.readFileSync(tempFile).toString('base64');
+        const fallbackConfig = {
+          encoding: 'MP3',
+          sampleRateHertz: 16000, // Try higher sample rate
+          languageCode: 'en-US',
+        };
+        
+        const fallbackRequest = {
+          audio: { content: audioBytes },
+          config: fallbackConfig,
+        };
+        
+        const [fallbackResponse] = await speechClient.recognize(fallbackRequest);
+        const fallbackTranscription = fallbackResponse.results
+          .map(result => result.alternatives[0].transcript)
+          .join('\n');
+        
+        console.log('Fallback transcription successful:', fallbackTranscription);
+        return fallbackTranscription;
+      } catch (fallbackError) {
+        console.error('Fallback transcription also failed:', fallbackError);
+        throw error; // Throw original error
+      }
+    }
+    
     throw error;
   } finally {
     // Clean up the temporary file

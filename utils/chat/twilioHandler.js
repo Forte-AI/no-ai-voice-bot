@@ -95,23 +95,58 @@ const handleVoiceResponse = async (req, res) => {
   const recordingSid = req.body.RecordingSid;
   const twiml = new twilio.twiml.VoiceResponse();
   
+  console.log('Handling voice response:', {
+    callSid,
+    recordingSid,
+    body: req.body
+  });
+  
   try {
     // Get the recording and transcribe it
+    console.log('Fetching recording from Twilio...');
     const recording = await twilioClient.recordings(recordingSid).fetch();
+    console.log('Recording details:', {
+      sid: recording.sid,
+      duration: recording.duration,
+      channels: recording.channels,
+      status: recording.status
+    });
+    
     const mediaUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}.mp3`;
+    console.log('Media URL:', mediaUrl);
+    
+    console.log('Starting transcription...');
     const transcription = await transcribeAudio(mediaUrl);
+    console.log('Transcription result:', transcription);
+    
+    if (!transcription || transcription.trim() === '') {
+      console.log('Empty transcription received, asking user to repeat');
+      twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I didn't catch that. Could you please repeat your answer?");
+      twiml.record({
+        action: `/twilio/response?callSid=${callSid}`,
+        maxLength: 30,
+        playBeep: false,
+        trim: 'trim-silence'
+      });
+      res.type('text/xml');
+      res.send(twiml.toString());
+      return;
+    }
     
     // Get current session
     const session = callSessions.get(callSid);
     if (!session) {
+      console.log('No session found for callSid:', callSid);
       twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error with your call. Please try again later.");
       res.type('text/xml');
       res.send(twiml.toString());
       return;
     }
     
+    console.log('Validating response for question ID:', session.currentQuestionId);
     // Validate the response
     const validationResult = await validateResponse(session.currentQuestionId, transcription, session.storeInfo);
+    console.log('Validation result:', validationResult);
     
     if (validationResult.isValid) {
       // Update session with validated information
@@ -124,10 +159,12 @@ const handleVoiceResponse = async (req, res) => {
       
       // If this is the end of the chat
       if (validationResult.endChat) {
+        console.log('Ending chat with message:', validationResult.message);
         twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, validationResult.message);
         twiml.hangup();
       } else {
         // Move to next question
+        console.log('Moving to next question:', validationResult.message);
         twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, validationResult.message);
         twiml.record({
           action: `/twilio/response?callSid=${callSid}`,
@@ -138,6 +175,7 @@ const handleVoiceResponse = async (req, res) => {
       }
     } else {
       // Handle invalid response
+      console.log('Invalid response, asking user to repeat:', validationResult.message);
       twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, validationResult.message);
       twiml.record({
         action: `/twilio/response?callSid=${callSid}`,
@@ -148,6 +186,14 @@ const handleVoiceResponse = async (req, res) => {
     }
   } catch (error) {
     console.error('Error handling voice response:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack,
+      callSid,
+      recordingSid
+    });
+    
     twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error processing your response. Please try again.");
     twiml.record({
       action: `/twilio/response?callSid=${callSid}`,
