@@ -1,11 +1,18 @@
 const twilio = require('twilio');
 const { getFirstQuestion, validateResponse } = require('./questions');
 const { transcribeAudio } = require('./transcribe');
+const SIPConfig = require('../sipConfig');
 
 // Initialize Twilio client
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const twilioClient = twilio(accountSid, authToken);
+
+// Initialize SIP configuration
+const sipConfig = new SIPConfig();
+
+// Optional phone number (for backward compatibility)
+const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
 
 // Store call sessions
 const callSessions = new Map();
@@ -23,7 +30,8 @@ const initializeCallSession = (callSid) => {
     personPhone: null,
     personAddress: null,
     contactName: null,
-    contactPhone: null
+    contactPhone: null,
+    callerInfo: null // Will be populated with SIP URI and caller details
   });
   return firstQuestion;
 };
@@ -33,8 +41,38 @@ const handleIncomingCall = async (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
   const callSid = req.body.CallSid;
   
-  // Initialize call session
+  // Capture SIP URI and caller information
+  const from = req.body.From; // Caller's phone number or SIP URI
+  const to = req.body.To; // Called number (your Twilio number)
+  const caller = req.body.Caller; // Alternative caller field
+  const called = req.body.Called; // Alternative called field
+  
+  console.log('Incoming call details:', {
+    callSid,
+    from,
+    to,
+    caller,
+    called,
+    callType: from && from.toLowerCase().startsWith('sip:') ? 'SIP' : 'Phone Number',
+    sipConfig: sipConfig.getTwilioConfig(),
+    twilioPhoneNumber: twilioPhoneNumber || 'Not configured'
+  });
+  
+  // Initialize call session with caller information
   const firstQuestion = initializeCallSession(callSid);
+  
+  // Store caller information in session
+  const session = callSessions.get(callSid);
+  if (session) {
+    session.callerInfo = {
+      from,
+      to,
+      caller,
+      called,
+      isSipCall: from && from.toLowerCase().startsWith('sip:'),
+      sipConfig: sipConfig.getTwilioConfig()
+    };
+  }
   
   // Start with the first question
   twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, firstQuestion.text);
