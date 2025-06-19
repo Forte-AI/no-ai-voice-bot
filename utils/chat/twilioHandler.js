@@ -114,7 +114,8 @@ const handleVoiceResponse = async (req, res) => {
     console.log('Fetching recording from Twilio...');
     let recording;
     let retryCount = 0;
-    const maxRetries = 5;
+    const maxRetries = 10;
+    const retryDelay = 3000;
     
     while (retryCount < maxRetries) {
       try {
@@ -134,8 +135,8 @@ const handleVoiceResponse = async (req, res) => {
         
         // If recording is still processing, wait and retry
         if (recording.status === 'processing' || recording.duration === '-1' || recording.duration === '0') {
-          console.log(`Recording still processing (attempt ${retryCount + 1}/${maxRetries}), waiting 2 seconds...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          console.log(`Recording still processing (attempt ${retryCount + 1}/${maxRetries}), waiting ${retryDelay/1000} seconds...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
           retryCount++;
           continue;
         }
@@ -143,8 +144,17 @@ const handleVoiceResponse = async (req, res) => {
         break;
       } catch (fetchError) {
         console.log(`Error fetching recording (attempt ${retryCount + 1}/${maxRetries}):`, fetchError.message);
+        
+        // If it's a 404 error, wait longer as the recording might still be processing
+        if (fetchError.code === 20404) {
+          console.log('Recording not found (404), waiting longer for processing...');
+          await new Promise(resolve => setTimeout(resolve, retryDelay * 2)); // Wait twice as long for 404s
+          retryCount++;
+          continue;
+        }
+        
         if (retryCount < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
           retryCount++;
           continue;
         } else {
@@ -236,7 +246,7 @@ const handleVoiceResponse = async (req, res) => {
       incidentDate: session.incidentDate
     });
     
-    // Validate the response
+    // Validate the response - properly await the async validation
     const validationResult = await validateResponse(session.currentQuestionId, transcription, session.storeInfo);
     console.log('Validation result:', validationResult);
     
@@ -251,9 +261,11 @@ const handleVoiceResponse = async (req, res) => {
       // Update session with validated information
       if (validationResult.storeInfo) {
         session.storeInfo = validationResult.storeInfo;
+        console.log('Updated session storeInfo:', session.storeInfo);
       }
       if (validationResult.incidentDate) {
         session.incidentDate = validationResult.incidentDate;
+        console.log('Updated session incidentDate:', session.incidentDate);
       }
       
       // Update current question ID if moving to next question

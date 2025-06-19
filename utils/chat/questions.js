@@ -735,10 +735,16 @@ const getNextQuestion = (currentQuestionId, nextQuestionId) => {
 const getFirstQuestion = () => questions[0];
 
 // Helper function to validate a response
-const validateResponse = (questionId, response, storeInfo = null) => {
+const validateResponse = async (questionId, response, storeInfo = null) => {
   const question = questions.find(q => q.id === questionId);
   if (!question) return { isValid: false, message: "Invalid question." };
-  return question.validate(response, storeInfo);
+  
+  // Handle async validation
+  if (question.validate.constructor.name === 'AsyncFunction') {
+    return await question.validate(response, storeInfo);
+  } else {
+    return question.validate(response, storeInfo);
+  }
 };
 
 function resetAllRetryCounts() {
