@@ -105,16 +105,34 @@ async function textToSpeechBase64(text) {
 
 // Handle WebSocket connection for streaming audio
 const handleStreamingConnection = (ws, req) => {
-  const callSid = req.url.split('callSid=')[1];
-  console.log('New streaming connection for callSid:', callSid);
   console.log('WebSocket URL:', req.url);
   console.log('WebSocket headers:', req.headers);
   
-  if (!callSid) {
-    console.error('No callSid provided in WebSocket URL');
+  // Extract callSid from URL - handle both query parameters and path
+  let callSid = null;
+  
+  if (req.url.includes('callSid=')) {
+    callSid = req.url.split('callSid=')[1];
+    // Remove any additional query parameters after callSid
+    if (callSid.includes('&')) {
+      callSid = callSid.split('&')[0];
+    }
+  } else {
+    // Try to extract from path if no query parameters
+    const pathParts = req.url.split('/');
+    callSid = pathParts[pathParts.length - 1];
+  }
+  
+  console.log('Extracted callSid:', callSid);
+  
+  if (!callSid || callSid === 'stream') {
+    console.error('No valid callSid provided in WebSocket URL');
+    console.error('URL:', req.url);
     ws.close();
     return;
   }
+  
+  console.log('New streaming connection for callSid:', callSid);
   
   // Initialize or get session
   let session = streamingSessions.get(callSid);

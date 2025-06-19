@@ -331,8 +331,7 @@ const server = app.listen(port, () => {
 
 // Set up WebSocket server for Twilio streaming
 const wss = new WebSocket.Server({ 
-  server,
-  path: '/twilio/stream' // Specify the path explicitly
+  server
 });
 
 wss.on('connection', (ws, req) => {
