@@ -110,15 +110,78 @@ const handleVoiceResponse = async (req, res) => {
   });
   
   try {
-    // Get the recording and transcribe it
+    // Get the recording and wait for it to be ready
     console.log('Fetching recording from Twilio...');
-    const recording = await twilioClient.recordings(recordingSid).fetch();
-    console.log('Recording details:', {
-      sid: recording.sid,
-      duration: recording.duration,
-      channels: recording.channels,
-      status: recording.status
-    });
+    let recording;
+    let retryCount = 0;
+    const maxRetries = 5;
+    
+    while (retryCount < maxRetries) {
+      try {
+        recording = await twilioClient.recordings(recordingSid).fetch();
+        console.log('Recording details:', {
+          sid: recording.sid,
+          duration: recording.duration,
+          channels: recording.channels,
+          status: recording.status,
+          retryCount: retryCount
+        });
+        
+        // Check if recording is ready
+        if (recording.status === 'completed' && recording.duration !== '-1' && recording.duration !== '0') {
+          break;
+        }
+        
+        // If recording is still processing, wait and retry
+        if (recording.status === 'processing' || recording.duration === '-1' || recording.duration === '0') {
+          console.log(`Recording still processing (attempt ${retryCount + 1}/${maxRetries}), waiting 2 seconds...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          retryCount++;
+          continue;
+        }
+        
+        break;
+      } catch (fetchError) {
+        console.log(`Error fetching recording (attempt ${retryCount + 1}/${maxRetries}):`, fetchError.message);
+        if (retryCount < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          retryCount++;
+          continue;
+        } else {
+          throw fetchError;
+        }
+      }
+    }
+    
+    // If recording is still not ready after retries, handle gracefully
+    if (!recording || recording.status !== 'completed' || recording.duration === '-1' || recording.duration === '0') {
+      console.log('Recording not ready after retries, asking user to repeat');
+      twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I didn't catch that. Could you please repeat your answer?");
+      
+      // Get current session first
+      const session = callSessions.get(callSid);
+      if (!session) {
+        console.log('No session found for recording not ready');
+        twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error with your call. Please try again later.");
+        res.type('text/xml');
+        res.send(twiml.toString());
+        return;
+      }
+      
+      // Use current question's talking time for retry
+      const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
+      const maxLength = currentQuestion ? (currentQuestion.talkingTime || 30) : 30;
+      
+      twiml.record({
+        action: `/twilio/response?callSid=${callSid}`,
+        maxLength: maxLength,
+        playBeep: false,
+        trim: 'trim-silence'
+      });
+      res.type('text/xml');
+      res.send(twiml.toString());
+      return;
+    }
     
     const mediaUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}.mp3`;
     console.log('Media URL:', mediaUrl);

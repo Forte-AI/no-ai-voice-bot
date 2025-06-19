@@ -36,9 +36,22 @@ async function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
     https.get(url, (response) => {
+      // Check if the response is successful
+      if (response.statusCode !== 200) {
+        reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+        return;
+      }
+      
       response.pipe(file);
       file.on('finish', () => {
         file.close();
+        // Check if the downloaded file has content
+        const stats = fs.statSync(dest);
+        if (stats.size === 0) {
+          reject(new Error('Downloaded file is empty'));
+          return;
+        }
+        console.log(`Downloaded file size: ${stats.size} bytes`);
         resolve();
       });
     }).on('error', (err) => {
@@ -69,6 +82,12 @@ async function transcribeAudio(recordingUri) {
     // Read the file
     const audioBytes = fs.readFileSync(tempFile).toString('base64');
     console.log('Audio file size:', audioBytes.length, 'characters');
+    
+    // Check if audio file has meaningful content
+    if (audioBytes.length < 100) {
+      console.log('Audio file too small, likely empty or corrupted');
+      return '';
+    }
     
     // Configure the request - try different settings for phone calls
     const audio = {
