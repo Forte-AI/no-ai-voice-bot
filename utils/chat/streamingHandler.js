@@ -145,6 +145,10 @@ const handleStreamingConnection = (ws, req) => {
   
   session.recognitionStream = recognizeStream;
   
+  // Send the first question immediately when connection is established
+  console.log('Sending first question immediately for callSid:', callSid);
+  sendQuestion(session, getFirstQuestion());
+  
   // Handle incoming audio data from Twilio
   ws.on('message', (message) => {
     try {
@@ -161,9 +165,7 @@ const handleStreamingConnection = (ws, req) => {
       } else if (data.event === 'start') {
         console.log('Stream started for callSid:', callSid);
         session.isListening = true;
-        
-        // Send initial question
-        sendQuestion(session, getFirstQuestion());
+        // First question already sent, no need to send again
       } else if (data.event === 'stop') {
         console.log('Stream stopped for callSid:', callSid);
         session.isListening = false;
@@ -358,7 +360,8 @@ const handleIncomingCallStreaming = async (req, res) => {
       track: 'inbound_track'
     });
   
-  twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "Connecting you to our voice assistant...");
+  // Don't say anything here - the first question will be sent via WebSocket
+  // twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "Connecting you to our voice assistant...");
   
   res.type('text/xml');
   res.send(twiml.toString());
