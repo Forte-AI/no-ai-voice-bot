@@ -8,6 +8,8 @@ const twilioRoutes = require('./routes/twilio');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const WebSocket = require('ws');
+const { handleStreamingConnection } = require('./utils/chat/streamingHandler');
 require('dotenv').config();
 
 const app = express();
@@ -312,6 +314,25 @@ app.get('*', (req, res) => {
 
 const server = app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
+});
+
+// Set up WebSocket server for Twilio streaming
+const wss = new WebSocket.Server({ server });
+
+wss.on('connection', (ws, req) => {
+  console.log('WebSocket connection established:', req.url);
+  
+  // Handle Twilio streaming connections
+  if (req.url && req.url.includes('/twilio/stream')) {
+    handleStreamingConnection(ws, req);
+  } else {
+    console.log('Unknown WebSocket connection, closing');
+    ws.close();
+  }
+});
+
+wss.on('error', (error) => {
+  console.error('WebSocket server error:', error);
 });
 
 module.exports = server; 
