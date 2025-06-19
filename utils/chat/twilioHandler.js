@@ -1,5 +1,5 @@
 const twilio = require('twilio');
-const { getFirstQuestion, validateResponse } = require('./questions');
+const { getFirstQuestion, validateResponse, questions } = require('./questions');
 const { transcribeAudio } = require('./transcribe');
 const SIPConfig = require('../sipConfig');
 
@@ -77,10 +77,18 @@ const handleIncomingCall = async (req, res) => {
   // Start with the first question
   twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, firstQuestion.text);
   
-  // Record user's response
+  // Record user's response with talking time from question
+  const maxLength = firstQuestion.talkingTime || 30;
+  console.log('Recording configuration:', {
+    questionId: firstQuestion.id,
+    questionText: firstQuestion.text,
+    talkingTime: firstQuestion.talkingTime,
+    maxLength: maxLength
+  });
+  
   twiml.record({
     action: `/twilio/response?callSid=${callSid}`,
-    maxLength: 30,
+    maxLength: maxLength,
     playBeep: false,
     trim: 'trim-silence'
   });
@@ -122,9 +130,24 @@ const handleVoiceResponse = async (req, res) => {
     if (!transcription || transcription.trim() === '') {
       console.log('Empty transcription received, asking user to repeat');
       twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I didn't catch that. Could you please repeat your answer?");
+      
+      // Get current session first
+      const session = callSessions.get(callSid);
+      if (!session) {
+        console.log('No session found for empty transcription');
+        twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error with your call. Please try again later.");
+        res.type('text/xml');
+        res.send(twiml.toString());
+        return;
+      }
+      
+      // Use current question's talking time for retry
+      const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
+      const maxLength = currentQuestion ? (currentQuestion.talkingTime || 30) : 30;
+      
       twiml.record({
         action: `/twilio/response?callSid=${callSid}`,
-        maxLength: 30,
+        maxLength: maxLength,
         playBeep: false,
         trim: 'trim-silence'
       });
@@ -185,9 +208,19 @@ const handleVoiceResponse = async (req, res) => {
         // Move to next question
         console.log('Moving to next question:', validationResult.message);
         twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, validationResult.message);
+        
+        // Get the next question to determine talking time
+        const nextQuestion = questions.find(q => q.id === session.currentQuestionId);
+        const maxLength = nextQuestion ? (nextQuestion.talkingTime || 30) : 30;
+        console.log('Next question recording config:', {
+          questionId: session.currentQuestionId,
+          talkingTime: nextQuestion ? nextQuestion.talkingTime : 'default',
+          maxLength: maxLength
+        });
+        
         twiml.record({
           action: `/twilio/response?callSid=${callSid}`,
-          maxLength: 30,
+          maxLength: maxLength,
           playBeep: false,
           trim: 'trim-silence'
         });
@@ -196,9 +229,14 @@ const handleVoiceResponse = async (req, res) => {
       // Handle invalid response
       console.log('Invalid response, asking user to repeat:', validationResult.message);
       twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, validationResult.message);
+      
+      // Use current question's talking time for retry
+      const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
+      const maxLength = currentQuestion ? (currentQuestion.talkingTime || 30) : 30;
+      
       twiml.record({
         action: `/twilio/response?callSid=${callSid}`,
-        maxLength: 30,
+        maxLength: maxLength,
         playBeep: false,
         trim: 'trim-silence'
       });
