@@ -8,8 +8,6 @@ const twilioRoutes = require('./routes/twilio');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
-const WebSocket = require('ws');
-const { handleStreamingConnection } = require('./utils/chat/streamingHandler');
 require('dotenv').config();
 
 const app = express();
@@ -23,19 +21,6 @@ app.use(express.static('public'));
 
 // Twilio routes
 app.use('/twilio', twilioRoutes);
-
-// Add a GET route for WebSocket endpoint to handle potential GET requests
-app.get('/twilio/stream', (req, res) => {
-  console.log('GET request to /twilio/stream:', req.url);
-  console.log('Query parameters:', req.query);
-  console.log('Headers:', req.headers);
-  
-  // This should be a WebSocket connection, not a GET request
-  res.status(400).json({ 
-    error: 'This endpoint requires WebSocket connection',
-    message: 'Twilio should connect via WebSocket, not HTTP GET'
-  });
-});
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -327,35 +312,6 @@ app.get('*', (req, res) => {
 
 const server = app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
-});
-
-// Set up WebSocket server for Twilio streaming
-const wss = new WebSocket.Server({ 
-  server
-});
-
-wss.on('connection', (ws, req) => {
-  console.log('WebSocket connection established:', req.url);
-  console.log('WebSocket path:', req.url);
-  console.log('WebSocket headers:', req.headers);
-  
-  // Handle Twilio streaming connections
-  if (req.url && req.url.includes('/twilio/stream')) {
-    console.log('Processing Twilio streaming connection');
-    handleStreamingConnection(ws, req);
-  } else {
-    console.log('Unknown WebSocket connection, closing');
-    ws.close();
-  }
-});
-
-wss.on('error', (error) => {
-  console.error('WebSocket server error:', error);
-});
-
-wss.on('headers', (headers, req) => {
-  console.log('WebSocket upgrade headers:', headers);
-  console.log('WebSocket upgrade request:', req.url);
 });
 
 module.exports = server; 
