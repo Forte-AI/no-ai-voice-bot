@@ -382,18 +382,22 @@ const handleIncomingCallStreaming = async (req, res) => {
   // Initialize streaming session
   initializeStreamingSession(callSid);
   
+  // Create WebSocket URL with simpler format
+  const wsUrl = `wss://${req.get('host')}/twilio/stream?callSid=${callSid}`;
+  console.log('WebSocket URL:', wsUrl);
+  
   // Start streaming with WebSocket - include both tracks
   twiml.start()
     .stream({
-      url: `wss://${req.get('host')}/twilio/stream?callSid=${callSid}`,
+      url: wsUrl,
       track: 'both_tracks' // Use both inbound and outbound tracks
     });
   
   // Add a small delay to ensure WebSocket is ready
   twiml.pause({ length: 1 });
   
-  // Don't say anything here - the first question will be sent via WebSocket
-  // twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "Connecting you to our voice assistant...");
+  // Add a fallback message in case WebSocket fails
+  twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "Are you a Sonic Franchise?");
   
   res.type('text/xml');
   res.send(twiml.toString());
