@@ -77,7 +77,7 @@ const handleIncomingCall = async (req, res) => {
   // Start with the first question
   twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, firstQuestion.text);
   
-  // Record user's response - simple approach like web chat
+  // Record user's response
   const maxLength = firstQuestion.talkingTime || 30;
   console.log('Recording configuration:', {
     questionId: firstQuestion.id,
@@ -97,7 +97,7 @@ const handleIncomingCall = async (req, res) => {
   res.send(twiml.toString());
 };
 
-// Handle user's voice response - simplified like web chat
+// Handle user's voice response
 const handleVoiceResponse = async (req, res) => {
   const callSid = req.body.CallSid;
   const recordingSid = req.body.RecordingSid;
@@ -114,7 +114,7 @@ const handleVoiceResponse = async (req, res) => {
     const mediaUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}.mp3`;
     console.log('Media URL:', mediaUrl);
     
-    // Transcribe the audio - same as web chat
+    // Transcribe the audio
     console.log('Starting transcription...');
     const transcription = await transcribeAudio(mediaUrl);
     console.log('Transcription result:', transcription);
