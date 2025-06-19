@@ -144,9 +144,22 @@ const handleVoiceResponse = async (req, res) => {
     }
     
     console.log('Validating response for question ID:', session.currentQuestionId);
+    console.log('Session state before validation:', {
+      currentQuestionId: session.currentQuestionId,
+      storeInfo: session.storeInfo,
+      incidentDate: session.incidentDate
+    });
+    
     // Validate the response
     const validationResult = await validateResponse(session.currentQuestionId, transcription, session.storeInfo);
     console.log('Validation result:', validationResult);
+    
+    console.log('Session state after validation:', {
+      currentQuestionId: session.currentQuestionId,
+      storeInfo: session.storeInfo,
+      incidentDate: session.incidentDate,
+      nextQuestionId: validationResult.nextQuestionId
+    });
     
     if (validationResult.isValid) {
       // Update session with validated information
@@ -155,6 +168,12 @@ const handleVoiceResponse = async (req, res) => {
       }
       if (validationResult.incidentDate) {
         session.incidentDate = validationResult.incidentDate;
+      }
+      
+      // Update current question ID if moving to next question
+      if (validationResult.nextQuestionId) {
+        session.currentQuestionId = validationResult.nextQuestionId;
+        console.log('Updated current question ID to:', validationResult.nextQuestionId);
       }
       
       // If this is the end of the chat
