@@ -77,7 +77,7 @@ const handleIncomingCall = async (req, res) => {
   // Start with the first question
   twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, firstQuestion.text);
   
-  // Record user's response with talking time from question
+  // Record user's response with direct streaming to our server
   const maxLength = firstQuestion.talkingTime || 30;
   console.log('Recording configuration:', {
     questionId: firstQuestion.id,
@@ -90,196 +90,60 @@ const handleIncomingCall = async (req, res) => {
     action: `/twilio/response?callSid=${callSid}`,
     maxLength: maxLength,
     playBeep: false,
-    trim: 'trim-silence'
+    trim: 'trim-silence',
+    recordingStatusCallback: `/twilio/recording-status?callSid=${callSid}`,
+    recordingStatusCallbackEvent: ['completed'],
+    recordingChannels: 'dual'
   });
   
   res.type('text/xml');
   res.send(twiml.toString());
 };
 
-// Handle user's voice response
-const handleVoiceResponse = async (req, res) => {
-  const callSid = req.body.CallSid;
+// Handle recording status callback (when recording is completed)
+const handleRecordingStatus = async (req, res) => {
+  const callSid = req.query.callSid;
   const recordingSid = req.body.RecordingSid;
+  const recordingUrl = req.body.RecordingUrl;
   const recordingDuration = req.body.RecordingDuration;
-  const twiml = new twilio.twiml.VoiceResponse();
   
-  console.log('Handling voice response:', {
+  console.log('Recording status callback:', {
     callSid,
     recordingSid,
+    recordingUrl,
     recordingDuration,
     body: req.body
   });
   
-  // Check if this is a test call (fake recording SID)
-  const isTestCall = recordingSid && recordingSid.startsWith('REtest');
+  // Send immediate response to Twilio
+  res.status(200).send('OK');
   
-  if (isTestCall) {
-    console.log('Detected test call, skipping recording fetch');
-    twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "This is a test call. In a real call, I would process your response.");
-    twiml.hangup();
-    res.type('text/xml');
-    res.send(twiml.toString());
-    return;
-  }
-  
-  // Check if there's no recording or recording duration is 0
-  if (!recordingSid || recordingDuration === '0' || recordingDuration === '0.0') {
-    console.log('No recording available, asking user to repeat');
-    twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I didn't catch that. Could you please repeat your answer?");
-    
-    // Get current session first
-    const session = callSessions.get(callSid);
-    if (!session) {
-      console.log('No session found for no recording');
-      twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error with your call. Please try again later.");
-      res.type('text/xml');
-      res.send(twiml.toString());
-      return;
-    }
-    
-    // Use current question's talking time for retry
-    const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
-    const maxLength = currentQuestion ? (currentQuestion.talkingTime || 30) : 30;
-    
-    twiml.record({
-      action: `/twilio/response?callSid=${callSid}`,
-      maxLength: maxLength,
-      playBeep: false,
-      trim: 'trim-silence'
-    });
-    res.type('text/xml');
-    res.send(twiml.toString());
-    return;
-  }
-  
+  // Process the recording asynchronously
   try {
-    // Get the recording and wait for it to be ready
-    console.log('Fetching recording from Twilio...');
-    let recording;
-    let retryCount = 0;
-    const maxRetries = 10; // Increased from 5 to 10
-    const retryDelay = 3000; // Increased from 2000 to 3000ms
-    
-    while (retryCount < maxRetries) {
-      try {
-        recording = await twilioClient.recordings(recordingSid).fetch();
-        console.log('Recording details:', {
-          sid: recording.sid,
-          duration: recording.duration,
-          channels: recording.channels,
-          status: recording.status,
-          retryCount: retryCount
-        });
-        
-        // Check if recording is ready
-        if (recording.status === 'completed' && recording.duration !== '-1' && recording.duration !== '0') {
-          break;
-        }
-        
-        // If recording is still processing, wait and retry
-        if (recording.status === 'processing' || recording.duration === '-1' || recording.duration === '0') {
-          console.log(`Recording still processing (attempt ${retryCount + 1}/${maxRetries}), waiting ${retryDelay/1000} seconds...`);
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
-          retryCount++;
-          continue;
-        }
-        
-        break;
-      } catch (fetchError) {
-        console.log(`Error fetching recording (attempt ${retryCount + 1}/${maxRetries}):`, fetchError.message);
-        
-        // If it's a 404 error, wait longer as the recording might still be processing
-        if (fetchError.code === 20404) {
-          console.log('Recording not found (404), waiting longer for processing...');
-          await new Promise(resolve => setTimeout(resolve, retryDelay * 2)); // Wait twice as long for 404s
-          retryCount++;
-          continue;
-        }
-        
-        if (retryCount < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
-          retryCount++;
-          continue;
-        } else {
-          throw fetchError;
-        }
-      }
-    }
-    
-    // If recording is still not ready after retries, handle gracefully
-    if (!recording || recording.status !== 'completed' || recording.duration === '-1' || recording.duration === '0') {
-      console.log('Recording not ready after retries, asking user to repeat');
-      twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I didn't catch that. Could you please repeat your answer?");
-      
-      // Get current session first
-      const session = callSessions.get(callSid);
-      if (!session) {
-        console.log('No session found for recording not ready');
-        twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error with your call. Please try again later.");
-        res.type('text/xml');
-        res.send(twiml.toString());
-        return;
-      }
-      
-      // Use current question's talking time for retry
-      const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
-      const maxLength = currentQuestion ? (currentQuestion.talkingTime || 30) : 30;
-      
-      twiml.record({
-        action: `/twilio/response?callSid=${callSid}`,
-        maxLength: maxLength,
-        playBeep: false,
-        trim: 'trim-silence'
-      });
-      res.type('text/xml');
-      res.send(twiml.toString());
-      return;
-    }
-    
-    const mediaUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}.mp3`;
-    console.log('Media URL:', mediaUrl);
-    
-    console.log('Starting transcription...');
-    const transcription = await transcribeAudio(mediaUrl);
+    console.log('Processing recording asynchronously...');
+    const transcription = await transcribeAudio(recordingUrl);
     console.log('Transcription result:', transcription);
     
     if (!transcription || transcription.trim() === '') {
-      console.log('Empty transcription received, asking user to repeat');
-      twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I didn't catch that. Could you please repeat your answer?");
-      
-      // Get current session first
-      const session = callSessions.get(callSid);
-      if (!session) {
-        console.log('No session found for empty transcription');
-        twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error with your call. Please try again later.");
-        res.type('text/xml');
-        res.send(twiml.toString());
-        return;
-      }
-      
-      // Use current question's talking time for retry
-      const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
-      const maxLength = currentQuestion ? (currentQuestion.talkingTime || 30) : 30;
-      
-      twiml.record({
-        action: `/twilio/response?callSid=${callSid}`,
-        maxLength: maxLength,
-        playBeep: false,
-        trim: 'trim-silence'
-      });
-      res.type('text/xml');
-      res.send(twiml.toString());
+      console.log('Empty transcription, will ask user to repeat on next interaction');
       return;
     }
     
+    // Process the transcription and generate response
+    await processTranscription(callSid, transcription);
+    
+  } catch (error) {
+    console.error('Error processing recording:', error);
+  }
+};
+
+// Process transcription and generate response
+const processTranscription = async (callSid, transcription) => {
+  try {
     // Get current session
     const session = callSessions.get(callSid);
     if (!session) {
       console.log('No session found for callSid:', callSid);
-      twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error with your call. Please try again later.");
-      res.type('text/xml');
-      res.send(twiml.toString());
       return;
     }
     
@@ -318,36 +182,65 @@ const handleVoiceResponse = async (req, res) => {
         console.log('Updated current question ID to:', validationResult.nextQuestionId);
       }
       
-      // If this is the end of the chat
-      if (validationResult.endChat) {
-        console.log('Ending chat with message:', validationResult.message);
-        twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, validationResult.message);
-        twiml.hangup();
-      } else {
-        // Move to next question
-        console.log('Moving to next question:', validationResult.message);
-        twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, validationResult.message);
-        
-        // Get the next question to determine talking time
-        const nextQuestion = questions.find(q => q.id === session.currentQuestionId);
-        const maxLength = nextQuestion ? (nextQuestion.talkingTime || 30) : 30;
-        console.log('Next question recording config:', {
-          questionId: session.currentQuestionId,
-          talkingTime: nextQuestion ? nextQuestion.talkingTime : 'default',
-          maxLength: maxLength
-        });
-        
-        twiml.record({
-          action: `/twilio/response?callSid=${callSid}`,
-          maxLength: maxLength,
-          playBeep: false,
-          trim: 'trim-silence'
-        });
-      }
+      // Store the response for the next interaction
+      session.lastResponse = {
+        message: validationResult.message,
+        endChat: validationResult.endChat,
+        nextQuestionId: validationResult.nextQuestionId
+      };
+      
+      console.log('Stored response for next interaction:', session.lastResponse);
+      
     } else {
       // Handle invalid response
-      console.log('Invalid response, asking user to repeat:', validationResult.message);
-      twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, validationResult.message);
+      console.log('Invalid response, storing retry message:', validationResult.message);
+      session.lastResponse = {
+        message: validationResult.message,
+        endChat: false,
+        retry: true
+      };
+    }
+    
+  } catch (error) {
+    console.error('Error processing transcription:', error);
+  }
+};
+
+// Handle user's voice response (simplified - just check for stored response)
+const handleVoiceResponse = async (req, res) => {
+  const callSid = req.body.CallSid;
+  const twiml = new twilio.twiml.VoiceResponse();
+  
+  console.log('Handling voice response:', {
+    callSid,
+    body: req.body
+  });
+  
+  // Get current session
+  const session = callSessions.get(callSid);
+  if (!session) {
+    console.log('No session found for callSid:', callSid);
+    twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error with your call. Please try again later.");
+    res.type('text/xml');
+    res.send(twiml.toString());
+    return;
+  }
+  
+  // Check if we have a stored response from the recording processing
+  if (session.lastResponse) {
+    const response = session.lastResponse;
+    console.log('Using stored response:', response);
+    
+    // Clear the stored response
+    delete session.lastResponse;
+    
+    if (response.endChat) {
+      console.log('Ending chat with message:', response.message);
+      twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, response.message);
+      twiml.hangup();
+    } else if (response.retry) {
+      console.log('Asking user to repeat:', response.message);
+      twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, response.message);
       
       // Use current question's talking time for retry
       const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
@@ -357,25 +250,51 @@ const handleVoiceResponse = async (req, res) => {
         action: `/twilio/response?callSid=${callSid}`,
         maxLength: maxLength,
         playBeep: false,
-        trim: 'trim-silence'
+        trim: 'trim-silence',
+        recordingStatusCallback: `/twilio/recording-status?callSid=${callSid}`,
+        recordingStatusCallbackEvent: ['completed'],
+        recordingChannels: 'dual'
+      });
+    } else {
+      console.log('Moving to next question:', response.message);
+      twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, response.message);
+      
+      // Get the next question to determine talking time
+      const nextQuestion = questions.find(q => q.id === session.currentQuestionId);
+      const maxLength = nextQuestion ? (nextQuestion.talkingTime || 30) : 30;
+      console.log('Next question recording config:', {
+        questionId: session.currentQuestionId,
+        talkingTime: nextQuestion ? nextQuestion.talkingTime : 'default',
+        maxLength: maxLength
+      });
+      
+      twiml.record({
+        action: `/twilio/response?callSid=${callSid}`,
+        maxLength: maxLength,
+        playBeep: false,
+        trim: 'trim-silence',
+        recordingStatusCallback: `/twilio/recording-status?callSid=${callSid}`,
+        recordingStatusCallbackEvent: ['completed'],
+        recordingChannels: 'dual'
       });
     }
-  } catch (error) {
-    console.error('Error handling voice response:', error);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      stack: error.stack,
-      callSid,
-      recordingSid
-    });
+  } else {
+    // No stored response, ask user to repeat
+    console.log('No stored response found, asking user to repeat');
+    twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I didn't catch that. Could you please repeat your answer?");
     
-    twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error processing your response. Please try again.");
+    // Use current question's talking time for retry
+    const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
+    const maxLength = currentQuestion ? (currentQuestion.talkingTime || 30) : 30;
+    
     twiml.record({
       action: `/twilio/response?callSid=${callSid}`,
-      maxLength: 30,
+      maxLength: maxLength,
       playBeep: false,
-      trim: 'trim-silence'
+      trim: 'trim-silence',
+      recordingStatusCallback: `/twilio/recording-status?callSid=${callSid}`,
+      recordingStatusCallbackEvent: ['completed'],
+      recordingChannels: 'dual'
     });
   }
   
@@ -385,5 +304,6 @@ const handleVoiceResponse = async (req, res) => {
 
 module.exports = {
   handleIncomingCall,
+  handleRecordingStatus,
   handleVoiceResponse
 }; 
