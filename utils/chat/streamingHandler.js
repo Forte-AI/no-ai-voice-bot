@@ -107,6 +107,8 @@ async function textToSpeechBase64(text) {
 const handleStreamingConnection = (ws, req) => {
   const callSid = req.url.split('callSid=')[1];
   console.log('New streaming connection for callSid:', callSid);
+  console.log('WebSocket URL:', req.url);
+  console.log('WebSocket headers:', req.headers);
   
   if (!callSid) {
     console.error('No callSid provided in WebSocket URL');
@@ -117,12 +119,16 @@ const handleStreamingConnection = (ws, req) => {
   // Initialize or get session
   let session = streamingSessions.get(callSid);
   if (!session) {
+    console.log('Creating new session for callSid:', callSid);
     session = initializeStreamingSession(callSid);
+  } else {
+    console.log('Using existing session for callSid:', callSid);
   }
   
   session.ws = ws;
   
   // Set up Google Speech-to-Text streaming recognition
+  console.log('Setting up Google Speech-to-Text for callSid:', callSid);
   const recognizeStream = speechClient
     .streamingRecognize({
       config: {
@@ -136,10 +142,11 @@ const handleStreamingConnection = (ws, req) => {
       interimResults: true,
     })
     .on('error', (error) => {
-      console.error('Speech recognition error:', error);
+      console.error('Speech recognition error for callSid:', callSid, error);
       ws.send(JSON.stringify({ type: 'error', message: 'Speech recognition error' }));
     })
     .on('data', (data) => {
+      console.log('Speech recognition data received for callSid:', callSid);
       handleSpeechRecognitionData(data, session);
     });
   
@@ -147,14 +154,18 @@ const handleStreamingConnection = (ws, req) => {
   
   // Send the first question immediately when connection is established
   console.log('Sending first question immediately for callSid:', callSid);
-  sendQuestion(session, getFirstQuestion());
+  sendQuestion(session, getFirstQuestion()).catch(error => {
+    console.error('Error sending first question for callSid:', callSid, error);
+  });
   
   // Handle incoming audio data from Twilio
   ws.on('message', (message) => {
     try {
+      console.log('WebSocket message received for callSid:', callSid, 'message length:', message.length);
       const data = JSON.parse(message);
       
       if (data.event === 'media') {
+        console.log('Media event received for callSid:', callSid);
         // Decode base64 audio data from Twilio
         const audioData = Buffer.from(data.media.payload, 'base64');
         
@@ -173,15 +184,17 @@ const handleStreamingConnection = (ws, req) => {
         if (recognizeStream) {
           recognizeStream.end();
         }
+      } else {
+        console.log('Unknown WebSocket event for callSid:', callSid, data.event);
       }
     } catch (error) {
-      console.error('Error processing WebSocket message:', error);
+      console.error('Error processing WebSocket message for callSid:', callSid, error);
     }
   });
   
   // Handle WebSocket close
-  ws.on('close', () => {
-    console.log('WebSocket closed for callSid:', callSid);
+  ws.on('close', (code, reason) => {
+    console.log('WebSocket closed for callSid:', callSid, 'code:', code, 'reason:', reason);
     session.isListening = false;
     
     if (session.recognitionStream) {
@@ -196,6 +209,20 @@ const handleStreamingConnection = (ws, req) => {
   // Handle WebSocket errors
   ws.on('error', (error) => {
     console.error('WebSocket error for callSid:', callSid, error);
+  });
+  
+  // Send a ping to keep connection alive
+  const pingInterval = setInterval(() => {
+    if (ws.readyState === ws.OPEN) {
+      ws.ping();
+    } else {
+      clearInterval(pingInterval);
+    }
+  }, 30000); // Ping every 30 seconds
+  
+  // Clean up ping interval on close
+  ws.on('close', () => {
+    clearInterval(pingInterval);
   });
 };
 
@@ -349,16 +376,21 @@ const handleIncomingCallStreaming = async (req, res) => {
   const callSid = req.body.CallSid;
   
   console.log('Incoming call for streaming:', callSid);
+  console.log('Request headers:', req.headers);
+  console.log('Request body:', req.body);
   
   // Initialize streaming session
   initializeStreamingSession(callSid);
   
-  // Start streaming with WebSocket
+  // Start streaming with WebSocket - include both tracks
   twiml.start()
     .stream({
       url: `wss://${req.get('host')}/twilio/stream?callSid=${callSid}`,
-      track: 'inbound_track'
+      track: 'both_tracks' // Use both inbound and outbound tracks
     });
+  
+  // Add a small delay to ensure WebSocket is ready
+  twiml.pause({ length: 1 });
   
   // Don't say anything here - the first question will be sent via WebSocket
   // twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "Connecting you to our voice assistant...");
