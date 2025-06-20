@@ -21,14 +21,14 @@ const path = require('path');
 const CONVERSATION_CONTROLS = {
   // Default turn settings - fallback for questions without specific settings
   turnSettings: {
-    timeoutCount: 5000, // 5 seconds to start speaking (like IBM Watson)
-    maxSilenceBeforeTimeout: 3000, // 3 seconds of silence before timeout
+    timeoutCount: 1200, // 1.2 seconds to start speaking (very fast for immediate responses)
+    maxSilenceBeforeTimeout: 800, // 0.8 seconds of silence before timeout
     maxTurnDuration: 30000, // 30 seconds maximum per turn
     minTurnDuration: 1000 // 1 second minimum per turn
   },
   
   // Post-response timeout - how long to wait after bot finishes speaking
-  postResponseTimeoutCount: 12000, // 12 seconds (like IBM Watson)
+  postResponseTimeoutCount: 100, // 100ms (very short pause)
   
   // Recording settings
   recordingSettings: {

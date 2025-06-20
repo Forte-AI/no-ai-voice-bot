@@ -3,9 +3,9 @@
     "phone_number": {
       "patterns": ["phone number", "phone", "telephone"],
       "settings": {
-        "timeoutCount": 7000,
-        "maxSilenceBeforeTimeout": 4000,
-        "postResponseTimeoutCount": 300,
+        "timeoutCount": 1500,
+        "maxSilenceBeforeTimeout": 1000,
+        "postResponseTimeoutCount": 100,
         "maxRecordingLength": 20,
         "minRecordingLength": 1.0
       }
@@ -13,9 +13,9 @@
     "date": {
       "patterns": ["date", "when"],
       "settings": {
-        "timeoutCount": 6000,
-        "maxSilenceBeforeTimeout": 3000,
-        "postResponseTimeoutCount": 200,
+        "timeoutCount": 1200,
+        "maxSilenceBeforeTimeout": 800,
+        "postResponseTimeoutCount": 100,
         "maxRecordingLength": 15,
         "minRecordingLength": 0.8
       }
@@ -24,9 +24,9 @@
       "patterns": ["name"],
       "excludePatterns": ["phone"],
       "settings": {
-        "timeoutCount": 5000,
-        "maxSilenceBeforeTimeout": 2500,
-        "postResponseTimeoutCount": 200,
+        "timeoutCount": 1000,
+        "maxSilenceBeforeTimeout": 600,
+        "postResponseTimeoutCount": 100,
         "maxRecordingLength": 12,
         "minRecordingLength": 0.8
       }
@@ -34,9 +34,9 @@
     "address": {
       "patterns": ["address"],
       "settings": {
-        "timeoutCount": 7000,
-        "maxSilenceBeforeTimeout": 4000,
-        "postResponseTimeoutCount": 300,
+        "timeoutCount": 1800,
+        "maxSilenceBeforeTimeout": 1200,
+        "postResponseTimeoutCount": 100,
         "maxRecordingLength": 25,
         "minRecordingLength": 1.2
       }
@@ -44,9 +44,9 @@
     "store_number": {
       "patterns": ["store number"],
       "settings": {
-        "timeoutCount": 6000,
-        "maxSilenceBeforeTimeout": 3000,
-        "postResponseTimeoutCount": 250,
+        "timeoutCount": 1200,
+        "maxSilenceBeforeTimeout": 800,
+        "postResponseTimeoutCount": 100,
         "maxRecordingLength": 18,
         "minRecordingLength": 0.8
       }
@@ -54,9 +54,9 @@
     "incident_description": {
       "patterns": ["describe", "incident"],
       "settings": {
-        "timeoutCount": 8000,
-        "maxSilenceBeforeTimeout": 5000,
-        "postResponseTimeoutCount": 400,
+        "timeoutCount": 2000,
+        "maxSilenceBeforeTimeout": 1500,
+        "postResponseTimeoutCount": 100,
         "maxRecordingLength": 45,
         "minRecordingLength": 1.5
       }
@@ -66,9 +66,9 @@
     "1": {
       "description": "Are you a Sonic Franchise?",
       "settings": {
-        "timeoutCount": 5000,
-        "maxSilenceBeforeTimeout": 2000,
-        "postResponseTimeoutCount": 200,
+        "timeoutCount": 800,
+        "maxSilenceBeforeTimeout": 500,
+        "postResponseTimeoutCount": 100,
         "maxRecordingLength": 8,
         "minRecordingLength": 0.5
       }
@@ -76,9 +76,9 @@
     "8": {
       "description": "Phone number question",
       "settings": {
-        "timeoutCount": 7000,
-        "maxSilenceBeforeTimeout": 4000,
-        "postResponseTimeoutCount": 300,
+        "timeoutCount": 1500,
+        "maxSilenceBeforeTimeout": 1000,
+        "postResponseTimeoutCount": 100,
         "maxRecordingLength": 20,
         "minRecordingLength": 1.0
       }
@@ -86,9 +86,9 @@
     "11": {
       "description": "Contact phone number question",
       "settings": {
-        "timeoutCount": 7000,
-        "maxSilenceBeforeTimeout": 4000,
-        "postResponseTimeoutCount": 300,
+        "timeoutCount": 1500,
+        "maxSilenceBeforeTimeout": 1000,
+        "postResponseTimeoutCount": 100,
         "maxRecordingLength": 20,
         "minRecordingLength": 1.0
       }
