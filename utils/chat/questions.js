@@ -54,7 +54,8 @@ const questions = [
         resetRetryCount(1);
         return {
           isValid: true,
-          message: `What is the store number, for example, 4 8 9 6?`
+          message: `What is the store number, for example, 4 8 9 6?`,
+          nextQuestionId: 2
         };
       }
       
@@ -264,7 +265,8 @@ const questions = [
           return {
             isValid: true,
             message: "Please describe the incident in one short sentence.",
-            incidentDate: response
+            incidentDate: response,
+            nextQuestionId: 5
           };
         }
       } catch (error) {
@@ -291,7 +293,8 @@ const questions = [
       return {
         isValid: true,
         message: "Please describe the incident in one short sentence.",
-        incidentDate: response
+        incidentDate: response,
+        nextQuestionId: 5
       };
     }
   },
@@ -326,7 +329,8 @@ const questions = [
           resetRetryCount(5);
           return {
             isValid: true,
-            message: "Was the ambulance called?"
+            message: "Was the ambulance called?",
+            nextQuestionId: 6
           };
         }
         
@@ -343,7 +347,8 @@ const questions = [
         resetRetryCount(5);
         return {
           isValid: true,
-          message: "Got it. Did you call ambulance?"
+          message: "Did you call ambulance?",
+          nextQuestionId: 6
         };
       } catch (error) {
         console.error("Error validating incident:", error);
@@ -367,7 +372,8 @@ const questions = [
         resetRetryCount(5);
         return {
           isValid: true,
-          message: "Did you call ambulance?"
+          message: "Did you call ambulance?",
+          nextQuestionId: 6
         };
       }
     }
@@ -383,7 +389,8 @@ const questions = [
       if (isYes || isNo) {
         return {
           isValid: true,
-          message: "Please ensure the preservation of both the video footage and witness statements. What is the name of the person involved in the incident?"
+          message: "Please ensure the preservation of both the video footage and witness statements. What is the name of the person involved in the incident?",
+          nextQuestionId: 7
         };
       }
       
@@ -400,7 +407,8 @@ const questions = [
       resetRetryCount(6);
       return {
         isValid: true,
-        message: "Please ensure the preservation of both the video footage and witness statements. What is the name of the person involved in the incident?"
+        message: "Please ensure the preservation of both the video footage and witness statements. What is the name of the person involved in the incident?",
+        nextQuestionId: 7
       };
     }
   },
@@ -435,7 +443,8 @@ const questions = [
           resetRetryCount(7);
           return {
             isValid: true,
-            message: "Got it, and what is the phone number of the person involved in the incident?"
+            message: "Got it, and what is the phone number of the person involved in the incident?",
+            nextQuestionId: 8
           };
         }
       } catch (error) {
@@ -461,7 +470,8 @@ const questions = [
       resetRetryCount(7);
       return {
         isValid: true,
-        message: "Got it. What is the phone number of the person involved in the incident?"
+        message: "Got it. What is the phone number of the person involved in the incident?",
+        nextQuestionId: 8
       };
     }
   },
@@ -496,7 +506,8 @@ const questions = [
           resetRetryCount(8);
           return {
             isValid: true,
-            message: "Ok. What is the address of the person involved in the incident?"
+            message: "Ok. What is the address of the person involved in the incident?",
+            nextQuestionId: 9
           };
         }
       } catch (error) {
@@ -522,7 +533,8 @@ const questions = [
       resetRetryCount(8);
       return {
         isValid: true,
-        message: "Ok. What is the address of the person involved in the incident?"
+        message: "Ok. What is the address of the person involved in the incident?",
+        nextQuestionId: 9
       };
     }
   },
@@ -557,7 +569,8 @@ const questions = [
           resetRetryCount(9);
           return {
             isValid: true,
-            message: "Additionally, what is your name or the name of the contact person we can reach out to regarding this incident? This will facilitate prompt communication with the adjustor within the next 24 hours."
+            message: "Additionally, what is your name or the name of the contact person we can reach out to regarding this incident? This will facilitate prompt communication with the adjustor within the next 24 hours.",
+            nextQuestionId: 10
           };
         }
       } catch (error) {
@@ -583,7 +596,8 @@ const questions = [
       resetRetryCount(9);
       return {
         isValid: true,
-        message: "Additionally, what is your name or the name of the contact person we can reach out to regarding this incident? This will facilitate prompt communication with the adjustor within the next 24 hours."
+        message: "Additionally, what is your name or the name of the contact person we can reach out to regarding this incident? This will facilitate prompt communication with the adjustor within the next 24 hours.",
+        nextQuestionId: 10
       };
     }
   },
@@ -627,7 +641,8 @@ const questions = [
           resetRetryCount(10);
           return {
             isValid: true,
-            message: "Ok, and what is the best phone number we can reach out to?"
+            message: "Ok, and what is the best phone number we can reach out to?",
+            nextQuestionId: 11
           };
         }
       } catch (error) {
@@ -653,7 +668,8 @@ const questions = [
       resetRetryCount(10);
       return {
         isValid: true,
-        message: "Thank you, and what is the best phone number we can reach out to?"
+        message: "Thank you, and what is the best phone number we can reach out to?",
+        nextQuestionId: 11
       };
     }
   },

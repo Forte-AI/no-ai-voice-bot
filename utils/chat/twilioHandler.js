@@ -160,6 +160,13 @@ const handleVoiceResponse = async (req, res) => {
     session.conversationState.lastResponseTime = Date.now();
     session.conversationState.isWaitingForResponse = false;
     
+    console.log('Current session state:', {
+      callSid,
+      currentQuestionId: session.currentQuestionId,
+      turnCount: session.conversationState.turnCount,
+      retryCount: session.conversationState.retryCount
+    });
+    
     // Get the recording and wait for it to be ready with enhanced retry logic
     console.log('Fetching recording from Twilio with enhanced retry logic...');
     let recording;
@@ -217,19 +224,23 @@ const handleVoiceResponse = async (req, res) => {
     // If recording is still not ready after retries, handle gracefully
     if (!recording || recording.status !== 'completed' || recording.duration === '-1' || recording.duration === '0') {
       console.log('Recording not ready after retries, asking user to repeat');
-      return handleRecordingError(twiml, session, callSid, "I didn't catch that. Could you please repeat your answer?");
+      handleRecordingError(twiml, session, callSid, "I didn't catch that. Could you please repeat your answer?");
+      res.type('text/xml');
+      res.send(twiml.toString());
+      return;
     }
     
     const mediaUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}.mp3`;
     console.log('Media URL:', mediaUrl);
     
     console.log('Starting transcription...');
-    const transcription = await transcribeAudio(mediaUrl);
+    let transcription = await transcribeAudio(mediaUrl);
     console.log('Transcription result:', transcription);
     
     if (!transcription || transcription.trim() === '') {
-      console.log('Empty transcription received, asking user to repeat');
-      return handleRecordingError(twiml, session, callSid, "I didn't catch that. Could you please repeat your answer?");
+      console.log('Empty transcription received, sending empty space to validation');
+      // Send empty space to validation instead of showing error immediately
+      transcription = " ";
     }
     
     console.log('Validating response for question ID:', session.currentQuestionId);
@@ -383,6 +394,12 @@ const handleVoiceResponse = async (req, res) => {
 // Helper function to handle recording errors consistently
 const handleRecordingError = (twiml, session, callSid, message) => {
   console.log('Handling recording error:', message);
+  console.log('Current session state in handleRecordingError:', {
+    callSid,
+    currentQuestionId: session.currentQuestionId,
+    retryCount: session.conversationState.retryCount
+  });
+  
   twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, message);
   
   // Use current question's talking time for retry
@@ -392,6 +409,12 @@ const handleRecordingError = (twiml, session, callSid, message) => {
     CONVERSATION_CONTROLS.recordingSettings.maxLength
   );
   
+  console.log('Recording config for retry:', {
+    questionId: session.currentQuestionId,
+    talkingTime: currentQuestion ? currentQuestion.talkingTime : 'default',
+    maxLength: maxLength
+  });
+  
   twiml.record({
     action: `/twilio/response?callSid=${callSid}`,
     maxLength: maxLength,
@@ -400,8 +423,6 @@ const handleRecordingError = (twiml, session, callSid, message) => {
     timeout: CONVERSATION_CONTROLS.turnSettings.timeoutCount / 1000,
     silenceTimeout: CONVERSATION_CONTROLS.turnSettings.maxSilenceBeforeTimeout / 1000
   });
-  
-  return { twiml, session };
 };
 
 // Handle recording status callback
@@ -424,5 +445,6 @@ module.exports = {
   handleIncomingCall,
   handleVoiceResponse,
   handleRecordingStatus,
-  CONVERSATION_CONTROLS
+  CONVERSATION_CONTROLS,
+  callSessions
 }; 
