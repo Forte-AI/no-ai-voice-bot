@@ -19,6 +19,97 @@ Our voice bot now uses sophisticated conversation controls similar to IBM Watson
 
 These controls manage conversation flow, timeouts, and turn-taking during phone calls for a more natural and reliable user experience.
 
+## 🎯 **NEW: Simple JSON Configuration System**
+
+### Quick Start - No Code Changes Needed!
+
+The easiest way to configure turn settings is by editing `config/questionSpecificSettings.json`:
+
+```json
+{
+  "questionPatterns": {
+    "phone_number": {
+      "patterns": ["phone number", "phone", "telephone"],
+      "settings": {
+        "timeoutCount": 7000,
+        "postResponseTimeoutCount": 15000,
+        "maxRecordingLength": 20
+      }
+    }
+  }
+}
+```
+
+### Settings Explained
+
+| Setting | What It Does | Recommended Values |
+|---------|-------------|-------------------|
+| `timeoutCount` | How long to wait for user to start speaking | 3-10 seconds |
+| `maxSilenceBeforeTimeout` | How long of silence before timeout | 2-5 seconds |
+| `postResponseTimeoutCount` | IBM-style pause after bot speaks | 8-20 seconds |
+| `maxRecordingLength` | Maximum recording time | 8-60 seconds |
+| `minRecordingLength` | Minimum valid recording time | 0.5-2 seconds |
+
+### Question Type Guidelines
+
+#### Yes/No Questions (e.g., "Are you a Sonic Franchise?")
+```json
+{
+  "timeoutCount": 3000-5000,
+  "postResponseTimeoutCount": 8000-12000,
+  "maxRecordingLength": 8-10
+}
+```
+
+#### Phone Numbers (e.g., "What is the phone number?")
+```json
+{
+  "timeoutCount": 6000-8000,
+  "postResponseTimeoutCount": 15000,
+  "maxRecordingLength": 18-20
+}
+```
+
+#### Descriptions (e.g., "Please describe the incident")
+```json
+{
+  "timeoutCount": 8000-10000,
+  "postResponseTimeoutCount": 20000,
+  "maxRecordingLength": 45-60
+}
+```
+
+### Two Ways to Configure
+
+#### Method 1: Pattern Matching
+```json
+"phone_number": {
+  "patterns": ["phone number", "phone", "telephone"],
+  "settings": {
+    "timeoutCount": 7000,
+    "postResponseTimeoutCount": 15000
+  }
+}
+```
+
+#### Method 2: Specific Question ID
+```json
+"8": {
+  "description": "Phone number question",
+  "settings": {
+    "timeoutCount": 7000,
+    "postResponseTimeoutCount": 15000
+  }
+}
+```
+
+### Testing Your Configuration
+
+Run this command to test your settings:
+```bash
+node scripts/test-simple-config.js
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -183,7 +274,57 @@ if (!validation.isValid) {
 | Recording Quality | High | High (dual channel) |
 | Retry Logic | Built-in | Exponential backoff |
 | Error Handling | Robust | Graceful degradation |
-| Configuration | JSON | Environment variables |
+| Configuration | JSON | Environment variables + JSON |
+
+## Troubleshooting
+
+### Common Issues
+
+**Problem:** Users getting cut off too quickly
+**Solution:** Increase `timeoutCount` and `maxRecordingLength`
+
+**Problem:** Too much silence being recorded
+**Solution:** Decrease `maxSilenceBeforeTimeout`
+
+**Problem:** Bot feels rushed
+**Solution:** Increase `postResponseTimeoutCount`
+
+**Problem:** Very short recordings being accepted
+**Solution:** Increase `minRecordingLength`
+
+### Testing Your Settings
+
+Run the test script to see how your settings work:
+```bash
+node scripts/test-simple-config.js
+```
+
+## Best Practices
+
+1. **Start Conservative:** Use shorter timeouts and increase if needed
+2. **Test with Real Users:** Different demographics may need different settings
+3. **Monitor Logs:** Watch for timeout errors or user complaints
+4. **A/B Test:** Try different settings for the same question type
+5. **Consider Context:** Time of day, user age, question complexity all matter
+
+## Quick Reference Card
+
+### For Yes/No Questions:
+- `timeoutCount`: 3000-5000ms
+- `postResponseTimeoutCount`: 8000-12000ms
+- `maxRecordingLength`: 8-10 seconds
+
+### For Phone Numbers:
+- `timeoutCount`: 6000-8000ms
+- `postResponseTimeoutCount`: 15000ms
+- `maxRecordingLength`: 18-20 seconds
+
+### For Descriptions:
+- `timeoutCount`: 8000-10000ms
+- `postResponseTimeoutCount`: 20000ms
+- `maxRecordingLength`: 45-60 seconds
+
+Remember: These are guidelines - adjust based on your specific use case and user feedback!
 
 ## Benefits
 
@@ -198,63 +339,12 @@ if (!validation.isValid) {
 - Graceful failure handling
 
 ### 3. Better User Experience
-- No beep sounds
-- Silence trimming
-- Appropriate timeouts
+- No premature timeouts
+- Appropriate response times
+- Professional conversation flow
 
-### 4. Configurable Behavior
-- Environment variable overrides
-- Runtime configuration
-- Validation and error checking
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Calls ending too quickly**
-   - Increase `TURN_TIMEOUT_COUNT`
-   - Increase `POST_RESPONSE_TIMEOUT_COUNT`
-
-2. **Poor audio quality**
-   - Check `recordingSettings.recordingChannels`
-   - Verify audio encoding settings
-
-3. **Too many retries**
-   - Decrease `MAX_RETRIES`
-   - Increase `retryDelay`
-
-4. **Conversations too long**
-   - Decrease `MAX_TURNS`
-   - Decrease `maxConversationDuration`
-
-### Debug Logging
-
-Enable detailed logging to monitor conversation flow:
-
-```javascript
-// The system automatically logs conversation details when monitoring is enabled
-console.log('Turn details:', {
-  turnCount: session.conversationState.turnCount,
-  lastResponseTime: session.conversationState.lastResponseTime,
-  retryCount: session.conversationState.retryCount
-});
-```
-
-## Best Practices
-
-1. **Start with Defaults**: Use the default IBM Watson-style settings initially.
-
-2. **Monitor Performance**: Track response times and error rates.
-
-3. **Adjust Gradually**: Make small changes and test thoroughly.
-
-4. **Consider Environment**: Adjust timeouts based on your users' needs.
-
-5. **Test Extensively**: Test with various audio conditions and user behaviors.
-
-## Future Enhancements
-
-- **Adaptive Timeouts**: Automatically adjust timeouts based on user behavior
-- **Voice Activity Detection**: More sophisticated silence detection
-- **Multi-language Support**: Language-specific conversation controls
-- **Analytics Integration**: Detailed conversation analytics and insights 
+### 4. Easy Configuration
+- Simple JSON file editing
+- No code changes required
+- Pattern-based matching
+- Question ID specific settings 

@@ -15,8 +15,11 @@
  * timeouts, and turn-taking during phone calls.
  */
 
+const fs = require('fs');
+const path = require('path');
+
 const CONVERSATION_CONTROLS = {
-  // Turn settings - how long to wait for user to start speaking
+  // Default turn settings - fallback for questions without specific settings
   turnSettings: {
     timeoutCount: 5000, // 5 seconds to start speaking (like IBM Watson)
     maxSilenceBeforeTimeout: 3000, // 3 seconds of silence before timeout
@@ -118,6 +121,38 @@ const getConversationControls = () => {
 };
 
 /**
+ * Get turn settings for a specific question type
+ * @param {string} questionType - The type of question ('yesNo', 'shortAnswer', 'openEnded', 'confirmation')
+ * @returns {Object} Turn settings for the specified question type
+ */
+const getTurnSettingsForQuestion = (questionType) => {
+  const controls = getConversationControls();
+  
+  // For backward compatibility, we'll use the JSON config for question-specific settings
+  // The questionType parameter is now mainly used for logging/debugging
+  console.log(`Getting turn settings for question type: ${questionType}`);
+  
+  // Return default settings - specific settings are now handled by getQuestionSettingsFromConfig
+  return controls.turnSettings;
+};
+
+/**
+ * Get recording settings for a specific question type
+ * @param {string} questionType - The type of question
+ * @returns {Object} Recording settings for the specified question type
+ */
+const getRecordingSettingsForQuestion = (questionType) => {
+  const controls = getConversationControls();
+  const turnSettings = getTurnSettingsForQuestion(questionType);
+  
+  return {
+    ...controls.recordingSettings,
+    maxLength: turnSettings.maxRecordingLength || controls.recordingSettings.maxLength,
+    minLength: turnSettings.minRecordingLength || controls.recordingSettings.minLength
+  };
+};
+
+/**
  * Validate conversation controls configuration
  * Ensures all settings are within acceptable ranges
  */
@@ -193,9 +228,66 @@ const getWatsonStyleConfig = () => {
   };
 };
 
+/**
+ * Get post-response timeout for a specific question type
+ * @param {string} questionType - The type of question
+ * @returns {number} Post-response timeout in ms
+ */
+const getPostResponseTimeoutForQuestion = (questionType) => {
+  const controls = getConversationControls();
+  
+  // For backward compatibility, return default timeout
+  // Specific timeouts are now handled by getQuestionSettingsFromConfig
+  console.log(`Getting post-response timeout for question type: ${questionType}`);
+  return controls.postResponseTimeoutCount;
+};
+
+/**
+ * Get question-specific settings from JSON configuration
+ * @param {string} questionText - The question text
+ * @param {string} questionId - The question ID (optional)
+ * @param {Object} defaultSettings - Default settings to fall back to
+ * @returns {Object} The settings to use
+ */
+const getQuestionSettingsFromConfig = (questionText, questionId = null, defaultSettings = {}) => {
+  try {
+    const configPath = path.join(__dirname, 'questionSpecificSettings.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    
+    // First check question ID (most specific)
+    if (questionId && config.questionIds[questionId]) {
+      console.log(`Using question ID ${questionId} specific settings`);
+      return { ...defaultSettings, ...config.questionIds[questionId].settings };
+    }
+    
+    // Then check patterns
+    const text = questionText.toLowerCase();
+    for (const [key, patternConfig] of Object.entries(config.questionPatterns)) {
+      const matches = patternConfig.patterns.some(pattern => text.includes(pattern));
+      const excluded = patternConfig.excludePatterns && 
+                      patternConfig.excludePatterns.some(pattern => text.includes(pattern));
+      
+      if (matches && !excluded) {
+        console.log(`Using pattern "${key}" settings for question: "${questionText}"`);
+        return { ...defaultSettings, ...patternConfig.settings };
+      }
+    }
+    
+    // Return default settings if no match
+    return defaultSettings;
+  } catch (error) {
+    console.log('Error loading question-specific config, using defaults:', error.message);
+    return defaultSettings;
+  }
+};
+
 module.exports = {
   CONVERSATION_CONTROLS,
   getConversationControls,
+  getTurnSettingsForQuestion,
+  getRecordingSettingsForQuestion,
+  getPostResponseTimeoutForQuestion,
+  getQuestionSettingsFromConfig,
   validateConversationControls,
   getWatsonStyleConfig
 }; 
