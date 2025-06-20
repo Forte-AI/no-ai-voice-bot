@@ -331,12 +331,16 @@ const handleVoiceResponse = async (req, res) => {
         // Get the next question to determine talking time and question type
         const nextQuestion = questions.find(q => q.id === session.currentQuestionId);
         
-        // Detect question type and get appropriate settings for next question
-        const questionSettings = getQuestionSettingsFromConfig(nextQuestion ? nextQuestion.text, nextQuestion.id, {
-          ...CONVERSATION_CONTROLS.turnSettings,
-          ...CONVERSATION_CONTROLS.recordingSettings,
-          postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
-        });
+        // Get question-specific settings for next question
+        const questionSettings = getQuestionSettingsFromConfig(
+          nextQuestion ? nextQuestion.text : '', 
+          nextQuestion ? nextQuestion.id : null, 
+          {
+            ...CONVERSATION_CONTROLS.turnSettings,
+            ...CONVERSATION_CONTROLS.recordingSettings,
+            postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
+          }
+        );
         
         // Apply question-specific settings
         const overriddenSettings = getQuestionSettingsFromConfig(
@@ -392,11 +396,15 @@ const handleVoiceResponse = async (req, res) => {
         
         // Use current question's settings for retry
         const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
-        const questionSettings = getQuestionSettingsFromConfig(currentQuestion ? currentQuestion.text, currentQuestion.id, {
-          ...CONVERSATION_CONTROLS.turnSettings,
-          ...CONVERSATION_CONTROLS.recordingSettings,
-          postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
-        });
+        const questionSettings = getQuestionSettingsFromConfig(
+          currentQuestion ? currentQuestion.text : '', 
+          currentQuestion ? currentQuestion.id : null, 
+          {
+            ...CONVERSATION_CONTROLS.turnSettings,
+            ...CONVERSATION_CONTROLS.recordingSettings,
+            postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
+          }
+        );
         
         // Apply question-specific settings
         const overriddenSettings = getQuestionSettingsFromConfig(
@@ -458,12 +466,17 @@ const handleVoiceResponse = async (req, res) => {
       } else {
         twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error processing your response. Please try again.");
         
+        // Use current question's settings for retry
         const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
-        const questionSettings = getQuestionSettingsFromConfig(currentQuestion ? currentQuestion.text, currentQuestion.id, {
-          ...CONVERSATION_CONTROLS.turnSettings,
-          ...CONVERSATION_CONTROLS.recordingSettings,
-          postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
-        });
+        const questionSettings = getQuestionSettingsFromConfig(
+          currentQuestion ? currentQuestion.text : '', 
+          currentQuestion ? currentQuestion.id : null, 
+          {
+            ...CONVERSATION_CONTROLS.turnSettings,
+            ...CONVERSATION_CONTROLS.recordingSettings,
+            postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
+          }
+        );
         
         // Apply question-specific settings
         const overriddenSettings = getQuestionSettingsFromConfig(
@@ -527,11 +540,15 @@ const handleRecordingError = (twiml, session, callSid, message) => {
   
   // Use current question's settings for retry
   const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
-  const questionSettings = getQuestionSettingsFromConfig(currentQuestion ? currentQuestion.text, currentQuestion.id, {
-    ...CONVERSATION_CONTROLS.turnSettings,
-    ...CONVERSATION_CONTROLS.recordingSettings,
-    postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
-  });
+  const questionSettings = getQuestionSettingsFromConfig(
+    currentQuestion ? currentQuestion.text : '', 
+    currentQuestion ? currentQuestion.id : null, 
+    {
+      ...CONVERSATION_CONTROLS.turnSettings,
+      ...CONVERSATION_CONTROLS.recordingSettings,
+      postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
+    }
+  );
   
   // Apply question-specific settings
   const overriddenSettings = getQuestionSettingsFromConfig(
