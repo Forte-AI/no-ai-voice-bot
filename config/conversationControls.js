@@ -1,18 +1,8 @@
 /**
  * Conversation Controls Configuration
  * 
- * This configuration mimics IBM Watson's voice telephony settings:
- * {
- *   "voice_telephony": {
- *     "turn_settings": {
- *       "timeout_count": 5000
- *     },
- *     "post_response_timeout_count": 12000
- *   }
- * }
- * 
- * These settings control how the voice bot manages conversation flow,
- * timeouts, and turn-taking during phone calls.
+ * Simplified configuration that focuses on turn duration per question
+ * and removes complex timeout settings.
  */
 
 const fs = require('fs');
@@ -21,14 +11,10 @@ const path = require('path');
 const CONVERSATION_CONTROLS = {
   // Default turn settings - fallback for questions without specific settings
   turnSettings: {
-    timeoutCount: 1200, // 1.2 seconds to start speaking (very fast for immediate responses)
-    maxSilenceBeforeTimeout: 800, // 0.8 seconds of silence before timeout
-    maxTurnDuration: 30000, // 30 seconds maximum per turn
-    minTurnDuration: 1000 // 1 second minimum per turn
+    defaultTurnDuration: 15000, // 15 seconds default turn duration
+    maxRetries: 3, // Maximum retries before ending call
+    finalTimeoutDuration: 30000 // 30 seconds final timeout before hanging up
   },
-  
-  // Post-response timeout - how long to wait after bot finishes speaking
-  postResponseTimeoutCount: 100, // 100ms (very short pause)
   
   // Recording settings
   recordingSettings: {
@@ -37,7 +23,8 @@ const CONVERSATION_CONTROLS = {
     trimSilence: true, // Trim silence from recordings
     playBeep: false, // Don't play beep sound
     recordingChannels: 'dual', // Record both channels for better quality
-    recordingStatusCallbackEvents: ['completed', 'failed']
+    recordingStatusCallbackEvents: ['completed', 'failed'],
+    maxSilence: 2 // Stop recording after 2 seconds of silence (early termination)
   },
   
   // Retry settings
@@ -97,16 +84,20 @@ const getConversationControls = () => {
   const controls = { ...CONVERSATION_CONTROLS };
   
   // Override with environment variables if present
-  if (process.env.TURN_TIMEOUT_COUNT) {
-    controls.turnSettings.timeoutCount = parseInt(process.env.TURN_TIMEOUT_COUNT);
+  if (process.env.DEFAULT_TURN_DURATION) {
+    controls.turnSettings.defaultTurnDuration = parseInt(process.env.DEFAULT_TURN_DURATION);
   }
   
-  if (process.env.POST_RESPONSE_TIMEOUT_COUNT) {
-    controls.postResponseTimeoutCount = parseInt(process.env.POST_RESPONSE_TIMEOUT_COUNT);
+  if (process.env.FINAL_TIMEOUT_DURATION) {
+    controls.turnSettings.finalTimeoutDuration = parseInt(process.env.FINAL_TIMEOUT_DURATION);
   }
   
   if (process.env.MAX_RECORDING_LENGTH) {
     controls.recordingSettings.maxLength = parseInt(process.env.MAX_RECORDING_LENGTH);
+  }
+  
+  if (process.env.MAX_SILENCE) {
+    controls.recordingSettings.maxSilence = parseInt(process.env.MAX_SILENCE);
   }
   
   if (process.env.MAX_RETRIES) {
@@ -121,19 +112,19 @@ const getConversationControls = () => {
 };
 
 /**
- * Get turn settings for a specific question type
- * @param {string} questionType - The type of question ('yesNo', 'shortAnswer', 'openEnded', 'confirmation')
- * @returns {Object} Turn settings for the specified question type
+ * Get turn duration for a specific question ID
+ * @param {string} questionId - The question ID
+ * @returns {number} Turn duration in milliseconds
  */
-const getTurnSettingsForQuestion = (questionType) => {
+const getTurnDurationForQuestion = (questionId) => {
   const controls = getConversationControls();
   
-  // For backward compatibility, we'll use the JSON config for question-specific settings
-  // The questionType parameter is now mainly used for logging/debugging
-  console.log(`Getting turn settings for question type: ${questionType}`);
+  // Get question-specific settings from JSON config
+  const questionSettings = getQuestionSettingsFromConfig('', questionId, {
+    turnDuration: controls.turnSettings.defaultTurnDuration
+  });
   
-  // Return default settings - specific settings are now handled by getQuestionSettingsFromConfig
-  return controls.turnSettings;
+  return questionSettings.turnDuration || controls.turnSettings.defaultTurnDuration;
 };
 
 /**
@@ -143,12 +134,11 @@ const getTurnSettingsForQuestion = (questionType) => {
  */
 const getRecordingSettingsForQuestion = (questionType) => {
   const controls = getConversationControls();
-  const turnSettings = getTurnSettingsForQuestion(questionType);
   
   return {
     ...controls.recordingSettings,
-    maxLength: turnSettings.maxRecordingLength || controls.recordingSettings.maxLength,
-    minLength: turnSettings.minRecordingLength || controls.recordingSettings.minLength
+    maxLength: controls.recordingSettings.maxLength,
+    minLength: controls.recordingSettings.minLength
   };
 };
 
@@ -160,12 +150,12 @@ const validateConversationControls = (controls) => {
   const errors = [];
   
   // Validate turn settings
-  if (controls.turnSettings.timeoutCount < 1000 || controls.turnSettings.timeoutCount > 30000) {
-    errors.push('turnSettings.timeoutCount must be between 1000 and 30000 milliseconds');
+  if (controls.turnSettings.defaultTurnDuration < 5000 || controls.turnSettings.defaultTurnDuration > 60000) {
+    errors.push('turnSettings.defaultTurnDuration must be between 5000 and 60000 milliseconds');
   }
   
-  if (controls.turnSettings.maxSilenceBeforeTimeout < 500 || controls.turnSettings.maxSilenceBeforeTimeout > 10000) {
-    errors.push('turnSettings.maxSilenceBeforeTimeout must be between 500 and 10000 milliseconds');
+  if (controls.turnSettings.finalTimeoutDuration < 10000 || controls.turnSettings.finalTimeoutDuration > 120000) {
+    errors.push('turnSettings.finalTimeoutDuration must be between 10000 and 120000 milliseconds');
   }
   
   // Validate recording settings
@@ -175,6 +165,10 @@ const validateConversationControls = (controls) => {
   
   if (controls.recordingSettings.minLength < 0.5 || controls.recordingSettings.minLength > 10) {
     errors.push('recordingSettings.minLength must be between 0.5 and 10 seconds');
+  }
+  
+  if (controls.recordingSettings.maxSilence < 1 || controls.recordingSettings.maxSilence > 10) {
+    errors.push('recordingSettings.maxSilence must be between 1 and 10 seconds');
   }
   
   // Validate retry settings
@@ -193,53 +187,36 @@ const validateConversationControls = (controls) => {
 };
 
 /**
- * Get IBM Watson-style configuration object
- * Returns configuration in the format similar to IBM Watson's voice_telephony settings
+ * Get simplified configuration object
+ * Returns configuration focused on turn duration
  */
-const getWatsonStyleConfig = () => {
+const getSimplifiedConfig = () => {
   const controls = getConversationControls();
   
   return {
-    voice_telephony: {
-      turn_settings: {
-        timeout_count: controls.turnSettings.timeoutCount,
-        max_silence_before_timeout: controls.turnSettings.maxSilenceBeforeTimeout,
-        max_turn_duration: controls.turnSettings.maxTurnDuration,
-        min_turn_duration: controls.turnSettings.minTurnDuration
-      },
-      post_response_timeout_count: controls.postResponseTimeoutCount,
-      recording_settings: {
-        max_length: controls.recordingSettings.maxLength,
-        min_length: controls.recordingSettings.minLength,
-        trim_silence: controls.recordingSettings.trimSilence,
-        play_beep: controls.recordingSettings.playBeep
-      },
-      retry_settings: {
-        max_retries: controls.retrySettings.maxRetries,
-        retry_delay: controls.retrySettings.retryDelay,
-        backoff_multiplier: controls.retrySettings.backoffMultiplier
-      },
-      conversation_flow: {
-        max_turns: controls.conversationFlow.maxTurns,
-        max_conversation_duration: controls.conversationFlow.maxConversationDuration,
-        allow_interruption: controls.conversationFlow.allowInterruption
-      }
+    turn_settings: {
+      default_turn_duration: controls.turnSettings.defaultTurnDuration,
+      final_timeout_duration: controls.turnSettings.finalTimeoutDuration,
+      max_retries: controls.turnSettings.maxRetries
+    },
+    recording_settings: {
+      max_length: controls.recordingSettings.maxLength,
+      min_length: controls.recordingSettings.minLength,
+      trim_silence: controls.recordingSettings.trimSilence,
+      play_beep: controls.recordingSettings.playBeep,
+      max_silence: controls.recordingSettings.maxSilence
+    },
+    retry_settings: {
+      max_retries: controls.retrySettings.maxRetries,
+      retry_delay: controls.retrySettings.retryDelay,
+      backoff_multiplier: controls.retrySettings.backoffMultiplier
+    },
+    conversation_flow: {
+      max_turns: controls.conversationFlow.maxTurns,
+      max_conversation_duration: controls.conversationFlow.maxConversationDuration,
+      allow_interruption: controls.conversationFlow.allowInterruption
     }
   };
-};
-
-/**
- * Get post-response timeout for a specific question type
- * @param {string} questionType - The type of question
- * @returns {number} Post-response timeout in ms
- */
-const getPostResponseTimeoutForQuestion = (questionType) => {
-  const controls = getConversationControls();
-  
-  // For backward compatibility, return default timeout
-  // Specific timeouts are now handled by getQuestionSettingsFromConfig
-  console.log(`Getting post-response timeout for question type: ${questionType}`);
-  return controls.postResponseTimeoutCount;
 };
 
 /**
@@ -284,10 +261,9 @@ const getQuestionSettingsFromConfig = (questionText, questionId = null, defaultS
 module.exports = {
   CONVERSATION_CONTROLS,
   getConversationControls,
-  getTurnSettingsForQuestion,
+  getTurnDurationForQuestion,
   getRecordingSettingsForQuestion,
-  getPostResponseTimeoutForQuestion,
-  getQuestionSettingsFromConfig,
   validateConversationControls,
-  getWatsonStyleConfig
+  getSimplifiedConfig,
+  getQuestionSettingsFromConfig
 }; 

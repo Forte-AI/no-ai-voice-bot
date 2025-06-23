@@ -1,21 +1,107 @@
 {
+  "questionIds": {
+    "1": {
+      "description": "Are you a Sonic Franchise?",
+      "settings": {
+        "turnDuration": 10000,
+        "maxRecordingLength": 10,
+        "minRecordingLength": 0.8
+      }
+    },
+    "2": {
+      "description": "Store number question",
+      "settings": {
+        "turnDuration": 12000,
+        "maxRecordingLength": 12,
+        "minRecordingLength": 0.8
+      }
+    },
+    "3": {
+      "description": "Store confirmation question",
+      "settings": {
+        "turnDuration": 10000,
+        "maxRecordingLength": 10,
+        "minRecordingLength": 0.8
+      }
+    },
+    "4": {
+      "description": "Date of incident question",
+      "settings": {
+        "turnDuration": 10000,
+        "maxRecordingLength": 10,
+        "minRecordingLength": 0.8
+      }
+    },
+    "5": {
+      "description": "Incident description question",
+      "settings": {
+        "turnDuration": 20000,
+        "maxRecordingLength": 20,
+        "minRecordingLength": 1.0
+      }
+    },
+    "6": {
+      "description": "Ambulance called question",
+      "settings": {
+        "turnDuration": 10000,
+        "maxRecordingLength": 10,
+        "minRecordingLength": 0.8
+      }
+    },
+    "7": {
+      "description": "Person name question",
+      "settings": {
+        "turnDuration": 10000,
+        "maxRecordingLength": 10,
+        "minRecordingLength": 0.8
+      }
+    },
+    "8": {
+      "description": "Phone number question",
+      "settings": {
+        "turnDuration": 12000,
+        "maxRecordingLength": 12,
+        "minRecordingLength": 0.8
+      }
+    },
+    "9": {
+      "description": "Address question",
+      "settings": {
+        "turnDuration": 15000,
+        "maxRecordingLength": 15,
+        "minRecordingLength": 1.0
+      }
+    },
+    "10": {
+      "description": "Contact name question",
+      "settings": {
+        "turnDuration": 10000,
+        "maxRecordingLength": 10,
+        "minRecordingLength": 0.8
+      }
+    },
+    "11": {
+      "description": "Contact phone number question",
+      "settings": {
+        "turnDuration": 15000,
+        "maxRecordingLength": 15,
+        "minRecordingLength": 1.0
+      }
+    }
+  },
   "questionPatterns": {
     "phone_number": {
       "patterns": ["phone number", "phone", "telephone"],
       "settings": {
-        "timeoutCount": 1500,
-        "maxSilenceBeforeTimeout": 1000,
-        "postResponseTimeoutCount": 100,
-        "maxRecordingLength": 20,
+        "turnDuration": 15000,
+        "maxRecordingLength": 15,
         "minRecordingLength": 1.0
       }
     },
     "date": {
       "patterns": ["date", "when"],
       "settings": {
-        "timeoutCount": 1200,
-        "maxSilenceBeforeTimeout": 800,
-        "postResponseTimeoutCount": 100,
+        "turnDuration": 15000,
         "maxRecordingLength": 15,
         "minRecordingLength": 0.8
       }
@@ -24,9 +110,7 @@
       "patterns": ["name"],
       "excludePatterns": ["phone"],
       "settings": {
-        "timeoutCount": 1000,
-        "maxSilenceBeforeTimeout": 600,
-        "postResponseTimeoutCount": 100,
+        "turnDuration": 12000,
         "maxRecordingLength": 12,
         "minRecordingLength": 0.8
       }
@@ -34,63 +118,25 @@
     "address": {
       "patterns": ["address"],
       "settings": {
-        "timeoutCount": 1800,
-        "maxSilenceBeforeTimeout": 1200,
-        "postResponseTimeoutCount": 100,
-        "maxRecordingLength": 25,
+        "turnDuration": 15000,
+        "maxRecordingLength": 15,
         "minRecordingLength": 1.2
       }
     },
     "store_number": {
       "patterns": ["store number"],
       "settings": {
-        "timeoutCount": 1200,
-        "maxSilenceBeforeTimeout": 800,
-        "postResponseTimeoutCount": 100,
-        "maxRecordingLength": 18,
+        "turnDuration": 15000,
+        "maxRecordingLength": 15,
         "minRecordingLength": 0.8
       }
     },
     "incident_description": {
       "patterns": ["describe", "incident"],
       "settings": {
-        "timeoutCount": 2000,
-        "maxSilenceBeforeTimeout": 1500,
-        "postResponseTimeoutCount": 100,
-        "maxRecordingLength": 45,
+        "turnDuration": 20000,
+        "maxRecordingLength": 20,
         "minRecordingLength": 1.5
-      }
-    }
-  },
-  "questionIds": {
-    "1": {
-      "description": "Are you a Sonic Franchise?",
-      "settings": {
-        "timeoutCount": 800,
-        "maxSilenceBeforeTimeout": 500,
-        "postResponseTimeoutCount": 100,
-        "maxRecordingLength": 8,
-        "minRecordingLength": 0.5
-      }
-    },
-    "8": {
-      "description": "Phone number question",
-      "settings": {
-        "timeoutCount": 1500,
-        "maxSilenceBeforeTimeout": 1000,
-        "postResponseTimeoutCount": 100,
-        "maxRecordingLength": 20,
-        "minRecordingLength": 1.0
-      }
-    },
-    "11": {
-      "description": "Contact phone number question",
-      "settings": {
-        "timeoutCount": 1500,
-        "maxSilenceBeforeTimeout": 1000,
-        "postResponseTimeoutCount": 100,
-        "maxRecordingLength": 20,
-        "minRecordingLength": 1.0
       }
     }
   }

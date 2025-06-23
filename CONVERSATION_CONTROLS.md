@@ -1,350 +1,221 @@
-# IBM Watson-Style Conversation Controls
-
-This document explains the conversation controls implemented in our Twilio voice bot, which are inspired by IBM Watson's voice telephony configuration.
+# Conversation Controls - Simplified Timeout Configuration
 
 ## Overview
 
-Our voice bot now uses sophisticated conversation controls similar to IBM Watson's approach:
+The conversation controls have been simplified to use a single `turnDuration` setting for each question instead of complex timeout configurations. This approach is more straightforward and easier to manage.
 
+## Key Changes
+
+### Removed Complex Settings
+- ❌ `timeoutCount` - Initial timeout before user starts speaking
+- ❌ `maxSilenceBeforeTimeout` - Silence timeout during recording
+- ❌ `postResponseTimeoutCount` - Pause after bot finishes speaking
+
+### Simplified Settings
+- ✅ `turnDuration` - Total time allowed for user response per question
+- ✅ `maxRetries` - Maximum retry attempts before ending call
+- ✅ `finalTimeoutDuration` - Final timeout before hanging up (30s silence timeout)
+- ✅ `maxSilence` - Early termination after 2s of silence (improves user experience)
+
+## Configuration Structure
+
+### Default Settings (`config/conversationControls.js`)
 ```javascript
-{
-  "voice_telephony": {
-    "turn_settings": {
-      "timeout_count": 5000
-    },
-    "post_response_timeout_count": 12000
-  }
+turnSettings: {
+  defaultTurnDuration: 10000, // 10 seconds default
+  maxRetries: 3, // Maximum retries before ending call
+  finalTimeoutDuration: 30000 // 30 seconds final timeout
+},
+recordingSettings: {
+  maxLength: 30, // Maximum recording length in seconds
+  minLength: 1, // Minimum recording length to consider valid
+  maxSilence: 2 // Stop recording after 2 seconds of silence
 }
 ```
 
-These controls manage conversation flow, timeouts, and turn-taking during phone calls for a more natural and reliable user experience.
+### Question-Specific Settings (`config/questionSpecificSettings.json`)
+The configuration uses a priority-based system:
 
-## 🎯 **NEW: Simple JSON Configuration System**
-
-### Quick Start - No Code Changes Needed!
-
-The easiest way to configure turn settings is by editing `config/questionSpecificSettings.json`:
+1. **Question ID Settings** (Highest Priority) - Most specific
+2. **Pattern Matching** (Fallback) - Less specific
+3. **Default Settings** (Lowest Priority) - Least specific
 
 ```json
 {
+  "questionIds": {
+    "1": {
+      "description": "Are you a Sonic Franchise?",
+      "settings": {
+        "turnDuration": 8000,
+        "maxRecordingLength": 8,
+        "minRecordingLength": 0.5
+      }
+    }
+  },
   "questionPatterns": {
     "phone_number": {
       "patterns": ["phone number", "phone", "telephone"],
       "settings": {
-        "timeoutCount": 7000,
-        "postResponseTimeoutCount": 15000,
-        "maxRecordingLength": 20
+        "turnDuration": 20000,
+        "maxRecordingLength": 20,
+        "minRecordingLength": 1.0
       }
     }
   }
 }
 ```
 
-### Settings Explained
+## How It Works
 
-| Setting | What It Does | Recommended Values |
-|---------|-------------|-------------------|
-| `timeoutCount` | How long to wait for user to start speaking | 3-10 seconds |
-| `maxSilenceBeforeTimeout` | How long of silence before timeout | 2-5 seconds |
-| `postResponseTimeoutCount` | IBM-style pause after bot speaks | 8-20 seconds |
-| `maxRecordingLength` | Maximum recording time | 8-60 seconds |
-| `minRecordingLength` | Minimum valid recording time | 0.5-2 seconds |
+1. **Turn Duration**: Each question has a specific `turnDuration` (in milliseconds) that determines how long the user has to respond
+2. **Timeout Handling**: When the turn duration is exceeded, Twilio automatically triggers a timeout
+3. **Retry Logic**: The existing retry logic in `questions.js` handles timeouts and invalid responses
+4. **Final Timeout**: If max retries are exceeded, the call is ended
+5. **Silence Timeout**: A 30-second final timeout prevents users from remaining silent indefinitely
 
-### Question Type Guidelines
+## Final Timeout Implementation
 
-#### Yes/No Questions (e.g., "Are you a Sonic Franchise?")
-```json
-{
-  "timeoutCount": 3000-5000,
-  "postResponseTimeoutCount": 8000-12000,
-  "maxRecordingLength": 8-10
-}
+The `finalTimeoutDuration` setting (default: 30 seconds) provides a safety mechanism to handle users who remain silent:
+
+### How Final Timeout Works
+
+1. **Timer Start**: When a call begins, a 30-second timer starts
+2. **Timer Reset**: Each time the user successfully responds, the timer resets to 30 seconds
+3. **Timer Trigger**: If the user remains silent for 30 consecutive seconds, the call is automatically hung up
+4. **Cleanup**: Proper timer cleanup prevents memory leaks
+
+### Final Timeout Behavior
+
+- **Starts**: When `initializeCallSession()` is called
+- **Resets**: When `validateResponse()` returns `isValid: true`
+- **Triggers**: After 30 seconds of silence (configurable via `FINAL_TIMEOUT_DURATION` environment variable)
+- **Action**: Hangs up call with message: "I haven't heard from you for a while. Please call back when you're ready to continue."
+
+### Configuration
+
+```javascript
+// Default: 30 seconds
+finalTimeoutDuration: 30000
+
+// Environment variable override
+FINAL_TIMEOUT_DURATION=45000  // 45 seconds
 ```
 
-#### Phone Numbers (e.g., "What is the phone number?")
-```json
-{
-  "timeoutCount": 6000-8000,
-  "postResponseTimeoutCount": 15000,
-  "maxRecordingLength": 18-20
-}
+## Max Silence Implementation
+
+The `maxSilence` setting (default: 2 seconds) provides intelligent early termination when users finish speaking:
+
+### How Max Silence Works
+
+1. **Recording Start**: Recording begins when user starts speaking
+2. **Silence Detection**: Twilio monitors for silence during recording
+3. **Early Termination**: Recording stops automatically after 2 seconds of silence
+4. **Fallback**: If no silence detected, falls back to `turnDuration` timeout
+5. **Silence Trimming**: Leading and trailing silence are automatically trimmed
+
+### Max Silence Behavior
+
+- **Triggers**: When user stops speaking for 2 consecutive seconds
+- **Fallback**: `turnDuration` timeout (e.g., 10 seconds) if no silence detected
+- **Benefits**: Faster response times, more natural conversation flow
+- **Configurable**: Can be adjusted via `MAX_SILENCE` environment variable
+
+### Configuration
+
+```javascript
+// Default: 2 seconds
+maxSilence: 2
+
+// Environment variable override
+MAX_SILENCE=3  // 3 seconds
 ```
 
-#### Descriptions (e.g., "Please describe the incident")
-```json
-{
-  "timeoutCount": 8000-10000,
-  "postResponseTimeoutCount": 20000,
-  "maxRecordingLength": 45-60
-}
-```
+### Example Scenarios
 
-### Two Ways to Configure
+| Scenario | User Speaks | Silence | Result |
+|----------|-------------|---------|---------|
+| Short response | 3s | 2s | ✅ Early termination after 5s total |
+| Long response | 25s | 2s | ✅ Early termination after 27s total |
+| Silent user | 0s | 10s | ⏰ Timeout after 10s (turnDuration) |
+| Continuous speech | 45s | 0s | ⏰ Timeout after 30s (maxLength) |
 
-#### Method 1: Pattern Matching
-```json
-"phone_number": {
-  "patterns": ["phone number", "phone", "telephone"],
-  "settings": {
-    "timeoutCount": 7000,
-    "postResponseTimeoutCount": 15000
-  }
-}
-```
+## Priority Order
 
-#### Method 2: Specific Question ID
-```json
-"8": {
-  "description": "Phone number question",
-  "settings": {
-    "timeoutCount": 7000,
-    "postResponseTimeoutCount": 15000
-  }
-}
-```
+The system checks settings in this order (highest to lowest priority):
 
-### Testing Your Configuration
+1. **Question ID Specific** - If a question ID is provided, use its exact settings
+2. **Pattern Matching** - If no question ID match, check if question text matches any patterns
+3. **Default Settings** - If no matches found, use default conversation controls
 
-Run this command to test your settings:
+## Question-Specific Turn Durations
+
+| Question ID | Description | Turn Duration |
+|-------------|-------------|---------------|
+| 1 | Are you a Sonic Franchise? | 8 seconds |
+| 2 | Store number | 18 seconds |
+| 3 | Store confirmation | 8 seconds |
+| 4 | Date of incident | 15 seconds |
+| 5 | Incident description | 45 seconds |
+| 6 | Ambulance called | 8 seconds |
+| 7 | Person name | 12 seconds |
+| 8 | Phone number | 20 seconds |
+| 9 | Address | 25 seconds |
+| 10 | Contact name | 20 seconds |
+| 11 | Contact phone | 20 seconds |
+
+## Pattern-Based Settings (Fallback)
+
+The system also supports pattern-based settings for questions that match specific patterns:
+
+- **Phone number questions**: 20 seconds
+- **Date questions**: 15 seconds  
+- **Name questions**: 12 seconds
+- **Address questions**: 25 seconds
+- **Store number questions**: 18 seconds
+- **Incident description questions**: 45 seconds
+
+## Environment Variables
+
+You can override default settings using environment variables:
+
 ```bash
-node scripts/test-simple-config.js
+DEFAULT_TURN_DURATION=20000  # 20 seconds default
+FINAL_TIMEOUT_DURATION=45000 # 45 seconds final timeout
+MAX_RETRIES=5                # 5 retries maximum
+MAX_RECORDING_LENGTH=60      # 60 seconds max recording
+MAX_TURNS=30                 # 30 turns maximum
 ```
 
-## Configuration
+## Benefits of Simplified Approach
 
-### Environment Variables
+1. **Easier Configuration**: Single setting per question instead of multiple timeout parameters
+2. **Clearer Logic**: Turn duration directly corresponds to user response time
+3. **Better Performance**: No complex timeout calculations or multiple timers
+4. **Easier Debugging**: Simpler to understand and troubleshoot
+5. **Consistent Behavior**: Predictable timeout behavior across all questions
+6. **Clear Priority**: Question ID settings take precedence over pattern matching
 
-You can configure conversation controls using environment variables:
+## Testing
+
+Run the test scripts to verify the configuration:
 
 ```bash
-# Turn management
-TURN_TIMEOUT_COUNT=5000              # 5 seconds to start speaking
-POST_RESPONSE_TIMEOUT_COUNT=12000    # 12 seconds after bot finishes
+# Test simplified timeout configuration
+node scripts/test-simplified-timeout.js
 
-# Recording settings
-MAX_RECORDING_LENGTH=30              # Maximum recording length in seconds
-MAX_RETRIES=3                        # Maximum retries for failed transcriptions
+# Test final timeout implementation
+node scripts/test-final-timeout.js
 
-# Conversation flow
-MAX_TURNS=20                         # Maximum turns before ending call
+# Test max silence implementation
+node scripts/test-max-silence.js
 ```
 
-### Default Configuration
-
-The default configuration mimics IBM Watson's settings:
-
-```javascript
-const CONVERSATION_CONTROLS = {
-  turnSettings: {
-    timeoutCount: 5000,              // 5 seconds to start speaking
-    maxSilenceBeforeTimeout: 3000,   // 3 seconds of silence before timeout
-    maxTurnDuration: 30000,          // 30 seconds maximum per turn
-    minTurnDuration: 1000            // 1 second minimum per turn
-  },
-  postResponseTimeoutCount: 12000,   // 12 seconds after bot finishes
-  recordingSettings: {
-    maxLength: 30,                   // Maximum recording length
-    minLength: 1,                    // Minimum recording length
-    trimSilence: true,               // Trim silence from recordings
-    playBeep: false                  // Don't play beep sound
-  },
-  retrySettings: {
-    maxRetries: 3,                   // Maximum retries
-    retryDelay: 2000,                // Delay between retries
-    backoffMultiplier: 1.5           // Exponential backoff
-  }
-};
-```
-
-## Key Features
-
-### 1. Turn Management
-
-**Timeout Control**: Like IBM Watson, our bot waits 5 seconds for the user to start speaking before timing out.
-
-**Silence Detection**: The bot detects 3 seconds of silence and automatically ends the recording.
-
-**Turn Duration Limits**: Each turn is limited to 30 seconds maximum with a 1-second minimum.
-
-### 2. Post-Response Timeout
-
-**Response Window**: After the bot finishes speaking, users have 12 seconds to respond (like IBM Watson).
-
-**Natural Flow**: This creates a more natural conversation rhythm.
-
-### 3. Enhanced Recording
-
-**Quality Settings**: 
-- Maximum recording length: 30 seconds
-- Minimum recording length: 1 second
-- Silence trimming enabled
-- No beep sound for better UX
-
-**Dual Channel Recording**: Records both channels for better audio quality.
-
-### 4. Intelligent Retry Logic
-
-**Exponential Backoff**: Retry delays increase exponentially (2s, 3s, 4.5s).
-
-**Maximum Retries**: Limits retries to prevent infinite loops.
-
-**Error Recovery**: Graceful handling of transcription failures.
-
-### 5. Conversation Flow Control
-
-**Turn Limits**: Maximum 20 turns per conversation.
-
-**Duration Limits**: 5-minute maximum conversation duration.
-
-**Graceful Degradation**: Handles errors without crashing.
-
-## Usage Examples
-
-### Basic Configuration
-
-```javascript
-const { getConversationControls } = require('./config/conversationControls');
-
-const controls = getConversationControls();
-console.log('Turn timeout:', controls.turnSettings.timeoutCount);
-```
-
-### Custom Configuration
-
-```javascript
-// Set environment variables for custom behavior
-process.env.TURN_TIMEOUT_COUNT = '3000';        // 3 seconds
-process.env.MAX_RECORDING_LENGTH = '45';        // 45 seconds
-process.env.MAX_RETRIES = '5';                  // 5 retries
-
-const controls = getConversationControls();
-```
-
-### IBM Watson-Style Output
-
-```javascript
-const { getWatsonStyleConfig } = require('./config/conversationControls');
-
-const watsonConfig = getWatsonStyleConfig();
-console.log(JSON.stringify(watsonConfig, null, 2));
-```
-
-Output:
-```json
-{
-  "voice_telephony": {
-    "turn_settings": {
-      "timeout_count": 5000,
-      "max_silence_before_timeout": 3000,
-      "max_turn_duration": 30000,
-      "min_turn_duration": 1000
-    },
-    "post_response_timeout_count": 12000,
-    "recording_settings": {
-      "max_length": 30,
-      "min_length": 1,
-      "trim_silence": true,
-      "play_beep": false
-    }
-  }
-}
-```
-
-## Validation
-
-The configuration is automatically validated to ensure settings are within acceptable ranges:
-
-```javascript
-const { validateConversationControls } = require('./config/conversationControls');
-
-const controls = getConversationControls();
-const validation = validateConversationControls(controls);
-
-if (!validation.isValid) {
-  console.error('Configuration errors:', validation.errors);
-}
-```
-
-## Comparison with IBM Watson
-
-| Feature | IBM Watson | Our Implementation |
-|---------|------------|-------------------|
-| Turn Timeout | 5000ms | 5000ms (configurable) |
-| Post-Response Timeout | 12000ms | 12000ms (configurable) |
-| Recording Quality | High | High (dual channel) |
-| Retry Logic | Built-in | Exponential backoff |
-| Error Handling | Robust | Graceful degradation |
-| Configuration | JSON | Environment variables + JSON |
-
-## Troubleshooting
-
-### Common Issues
-
-**Problem:** Users getting cut off too quickly
-**Solution:** Increase `timeoutCount` and `maxRecordingLength`
-
-**Problem:** Too much silence being recorded
-**Solution:** Decrease `maxSilenceBeforeTimeout`
-
-**Problem:** Bot feels rushed
-**Solution:** Increase `postResponseTimeoutCount`
-
-**Problem:** Very short recordings being accepted
-**Solution:** Increase `minRecordingLength`
-
-### Testing Your Settings
-
-Run the test script to see how your settings work:
-```bash
-node scripts/test-simple-config.js
-```
-
-## Best Practices
-
-1. **Start Conservative:** Use shorter timeouts and increase if needed
-2. **Test with Real Users:** Different demographics may need different settings
-3. **Monitor Logs:** Watch for timeout errors or user complaints
-4. **A/B Test:** Try different settings for the same question type
-5. **Consider Context:** Time of day, user age, question complexity all matter
-
-## Quick Reference Card
-
-### For Yes/No Questions:
-- `timeoutCount`: 3000-5000ms
-- `postResponseTimeoutCount`: 8000-12000ms
-- `maxRecordingLength`: 8-10 seconds
-
-### For Phone Numbers:
-- `timeoutCount`: 6000-8000ms
-- `postResponseTimeoutCount`: 15000ms
-- `maxRecordingLength`: 18-20 seconds
-
-### For Descriptions:
-- `timeoutCount`: 8000-10000ms
-- `postResponseTimeoutCount`: 20000ms
-- `maxRecordingLength`: 45-60 seconds
-
-Remember: These are guidelines - adjust based on your specific use case and user feedback!
-
-## Benefits
-
-### 1. Natural Conversation Flow
-- Proper turn-taking timing
-- Natural pauses and responses
-- Reduced awkward silences
-
-### 2. Improved Reliability
-- Intelligent retry logic
-- Error recovery mechanisms
-- Graceful failure handling
-
-### 3. Better User Experience
-- No premature timeouts
-- Appropriate response times
-- Professional conversation flow
-
-### 4. Easy Configuration
-- Simple JSON file editing
-- No code changes required
-- Pattern-based matching
-- Question ID specific settings 
+These will validate:
+- Conversation controls configuration
+- Turn durations for all questions
+- Question-specific settings
+- Pattern matching functionality
+- Final timeout implementation
+- Timer behavior and cleanup
+- Max silence early termination
+- Twilio record parameters

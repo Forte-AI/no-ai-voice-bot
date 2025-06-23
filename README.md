@@ -1,85 +1,54 @@
-# Sonic Claims Voice Bot
+# No-AI Voice Bot
 
-A voice-enabled chatbot for handling Sonic franchise claims, supporting both web and phone interactions with IBM Watson-style conversation controls for natural, reliable voice conversations.
+A Twilio-based voice bot for handling insurance claims over the phone. This bot guides users through a structured conversation to collect claim information without using AI for decision-making.
 
 ## Features
 
-- Web-based chat interface with voice input/output
-- Phone integration via Twilio with intelligent conversation controls
-- Google Cloud Speech-to-Text for voice transcription
-- Google Cloud Text-to-Speech for voice synthesis
-- OpenAI integration for natural language processing
-- IBM Watson-style timeout and turn management
-- Enhanced recording approach with retry logic and error recovery
+- **Phone Integration**: Full Twilio phone number integration
+- **Voice Recognition**: Google Cloud Speech-to-Text for accurate transcription
+- **Natural Voice**: Google Cloud Text-to-Speech with high-quality voice
+- **Simplified Timeout Management**: Single turn duration per question
+- **Error Handling**: Robust retry logic and graceful error recovery
+- **Configurable**: Easy JSON-based configuration for question-specific settings
+- **Voice-based interaction**: Natural conversation flow with speech recognition
+- **Question-specific timeouts**: Custom turn durations for different question types
+- **Intelligent retry logic**: Automatic retry with exponential backoff for failed transcriptions
+- **Final timeout protection**: 30-second silence timeout to prevent indefinite calls
+- **Early termination**: 2-second silence detection for faster response times
+- **Error recovery**: Intelligent retry logic and graceful degradation
+- **Configurable behavior**: JSON-based question-specific settings
+- **Better user experience**: Appropriate timeouts for each question type
 
-## Prerequisites
+## Quick Start
 
-- Node.js (v14 or higher)
-- Google Cloud account with Speech-to-Text and Text-to-Speech APIs enabled
-- Twilio account with a phone number
-- OpenAI API key
-
-## Environment Setup
-
-Create a `.env` file in the root directory with the following variables:
-
-```env
-# OpenAI API Key
-OPENAI_API_KEY=your_openai_api_key_here
-
-# Google Cloud credentials (choose one method)
-# Method 1: Base64 encoded credentials
-GOOGLE_CREDENTIALS_BASE64=your_base64_encoded_credentials
-
-# Method 2: Individual credential variables
-GOOGLE_PROJECT_ID=your_project_id
-GOOGLE_PRIVATE_KEY_ID=your_private_key_id
-GOOGLE_PRIVATE_KEY=your_private_key
-GOOGLE_CLIENT_EMAIL=your_client_email
-GOOGLE_CLIENT_ID=your_client_id
-GOOGLE_CLIENT_CERT_URL=your_client_cert_url
-
-# Twilio credentials
-TWILIO_ACCOUNT_SID=your_twilio_account_sid_here
-TWILIO_AUTH_TOKEN=your_twilio_auth_token_here
-TWILIO_PHONE_NUMBER=your_twilio_phone_number_here
-
-# Conversation Controls (optional - uses IBM Watson defaults)
-TURN_TIMEOUT_COUNT=5000              # 5 seconds to start speaking
-POST_RESPONSE_TIMEOUT_COUNT=12000    # 12 seconds after bot finishes
-MAX_RECORDING_LENGTH=30              # Maximum recording length in seconds
-MAX_RETRIES=3                        # Maximum retries for failed transcriptions
-MAX_TURNS=20                         # Maximum turns before ending call
-
-# Server configuration
-PORT=3000
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd no-ai-voice-bot
 ```
 
-## Installation
-
-1. Install dependencies:
+2. Install dependencies:
 ```bash
 npm install
 ```
 
-2. Install ngrok for local testing:
+3. Set up environment variables:
 ```bash
-npm install -g ngrok
+cp .env.example .env
+# Edit .env with your credentials
 ```
 
-## Running the Application
-
-1. Start the server:
+4. Start the server:
 ```bash
-node server.js
+npm start
 ```
 
-2. In a separate terminal, start ngrok:
+5. In a separate terminal, start ngrok:
 ```bash
 ngrok http 3000
 ```
 
-3. Configure Twilio webhook:
+6. Configure Twilio webhook:
    - Copy the ngrok URL (e.g., `https://xxxx-xx-xx-xxx-xx.ngrok.io`)
    - Go to Twilio Console > Phone Numbers > Manage > Active numbers
    - Click on your phone number
@@ -90,39 +59,27 @@ ngrok http 3000
      - Set webhook URL to: `https://your-ngrok-url/twilio/status`
      - Set HTTP method to POST
 
-## IBM Watson-Style Conversation Controls
+## Simplified Conversation Controls
 
-Our voice bot uses sophisticated conversation controls inspired by IBM Watson's voice telephony configuration:
-
-```javascript
-{
-  "voice_telephony": {
-    "turn_settings": {
-      "timeout_count": 5000
-    },
-    "post_response_timeout_count": 12000
-  }
-}
-```
+Our voice bot uses a simplified timeout configuration that focuses on turn duration per question:
 
 ### Key Features
 
-- **Turn Management**: 5-second timeout for user to start speaking
-- **Silence Detection**: 3-second silence detection with automatic recording end
-- **Post-Response Timeout**: 12-second window after bot finishes speaking
-- **Intelligent Retry Logic**: Exponential backoff for failed transcriptions
-- **Error Recovery**: Graceful handling of transcription failures
-- **Configurable Settings**: Environment variable overrides for customization
+- **Turn Duration**: Each question has a specific time limit for user response
+- **Automatic Timeout**: Twilio handles timeouts when turn duration is exceeded
+- **Retry Logic**: Existing retry logic in questions.js handles timeouts and invalid responses
+- **Question-Specific Settings**: Easy configuration via JSON file
+- **Pattern Matching**: Automatic settings based on question content
 
 ### Testing Conversation Controls
 
-Run the conversation controls test to verify your configuration:
+Run the simplified timeout test to verify your configuration:
 
 ```bash
-node scripts/test-conversation-controls.js
+node scripts/test-simplified-timeout.js
 ```
 
-This will validate that your settings match IBM Watson's approach and demonstrate all features.
+This will validate turn durations for all questions and demonstrate the simplified approach.
 
 ## Google Cloud Voice Configuration
 
@@ -161,15 +118,15 @@ To use a different voice:
 3. Speak your response - audio is recorded and processed
 4. The system will transcribe your speech and continue the conversation naturally
 
-### Testing Conversation Controls
+### Testing Simplified Timeout Configuration
 ```bash
-# Test the IBM Watson-style conversation controls
-node scripts/test-conversation-controls.js
+# Test the simplified timeout configuration
+node scripts/test-simplified-timeout.js
 ```
 
 ## Architecture
 
-The phone integration uses Twilio's recording approach with intelligent conversation controls:
+The phone integration uses Twilio's recording approach with simplified conversation controls:
 
 ```
 Phone Call → Twilio → Recording → Google Speech-to-Text → AI Processing → Text-to-Speech → Twilio → Phone
@@ -177,21 +134,21 @@ Phone Call → Twilio → Recording → Google Speech-to-Text → AI Processing 
 
 This approach provides:
 - **Reliable processing**: Robust recording and transcription
-- **Natural conversation flow**: IBM Watson-style turn management
+- **Simple timeout management**: Single turn duration per question
 - **Error recovery**: Intelligent retry logic and graceful degradation
-- **Configurable behavior**: Environment variable customization
-- **Better user experience**: Appropriate timeouts and silence detection
+- **Configurable behavior**: JSON-based question-specific settings
+- **Better user experience**: Appropriate timeouts for each question type
 
 ## Conversation Flow
 
 ### Turn Management
 1. **Bot speaks**: Delivers question or response
-2. **Post-response timeout**: 12-second window for user to respond
-3. **Recording starts**: User begins speaking
-4. **Turn timeout**: 5-second timeout if user doesn't start speaking
-5. **Silence detection**: 3-second silence ends recording automatically
-6. **Processing**: Audio is transcribed and validated
-7. **Retry logic**: Failed transcriptions are retried with exponential backoff
+2. **Recording starts**: User begins speaking
+3. **Silence detection**: Recording stops after 2s of silence (early termination)
+4. **Turn timeout**: Question-specific duration limit (fallback)
+5. **Processing**: Audio is transcribed and validated
+6. **Retry logic**: Failed transcriptions are retried with exponential backoff
+7. **Final timeout**: 30-second silence timeout prevents indefinite calls
 
 ### Error Handling
 - **Empty recordings**: Automatic retry with user prompt
@@ -217,8 +174,7 @@ This approach provides:
    - Check retry settings in conversation controls
 
 4. If calls end too quickly:
-   - Increase `TURN_TIMEOUT_COUNT` environment variable
-   - Increase `POST_RESPONSE_TIMEOUT_COUNT` environment variable
+   - Increase turn duration in `config/questionSpecificSettings.json`
    - Check conversation flow settings
 
 5. If too many retries occur:
@@ -232,26 +188,30 @@ This approach provides:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TURN_TIMEOUT_COUNT` | 5000 | Milliseconds to wait for user to start speaking |
-| `POST_RESPONSE_TIMEOUT_COUNT` | 12000 | Milliseconds after bot finishes speaking |
+| `DEFAULT_TURN_DURATION` | 15000 | Default turn duration in milliseconds |
+| `FINAL_TIMEOUT_DURATION` | 30000 | Final timeout duration in milliseconds |
 | `MAX_RECORDING_LENGTH` | 30 | Maximum recording length in seconds |
+| `MAX_SILENCE` | 2 | Max silence before early termination in seconds |
 | `MAX_RETRIES` | 3 | Maximum retries for failed transcriptions |
 | `MAX_TURNS` | 20 | Maximum turns before ending call |
 
-### Advanced Configuration
+### Question-Specific Configuration
 
-For advanced configuration, modify `config/conversationControls.js`:
+For question-specific settings, edit `config/questionSpecificSettings.json`:
 
-```javascript
-const CONVERSATION_CONTROLS = {
-  turnSettings: {
-    timeoutCount: 5000,              // 5 seconds to start speaking
-    maxSilenceBeforeTimeout: 3000,   // 3 seconds of silence before timeout
-    maxTurnDuration: 30000,          // 30 seconds maximum per turn
-    minTurnDuration: 1000            // 1 second minimum per turn
-  },
-  // ... more settings
-};
+```json
+{
+  "questionIds": {
+    "1": {
+      "description": "Are you a Sonic Franchise?",
+      "settings": {
+        "turnDuration": 8000,
+        "maxRecordingLength": 8,
+        "minRecordingLength": 0.5
+      }
+    }
+  }
+}
 ```
 
 ## Deployment
@@ -261,14 +221,13 @@ For production deployment:
 1. Deploy to a cloud provider (Heroku, AWS, Google Cloud, etc.)
 2. Update Twilio webhook URLs to use your production domain
 3. Set all environment variables in your production environment
-4. Configure conversation controls for your use case
+4. Configure question-specific settings for your use case
 5. Monitor conversation logs and adjust settings as needed
 
 ## Documentation
 
-- [Conversation Controls Guide](CONVERSATION_CONTROLS.md) - Detailed guide on IBM Watson-style conversation controls
+- [Conversation Controls Guide](CONVERSATION_CONTROLS.md) - Detailed guide on simplified timeout configuration
 - [SIP Setup Guide](SIP_SETUP.md) - Guide for SIP URI configuration
-- [Streaming Setup Guide](STREAMING_SETUP.md) - Guide for streaming approach (alternative)
 
 ## License
 

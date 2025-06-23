@@ -347,7 +347,7 @@ const questions = [
         resetRetryCount(5);
         return {
           isValid: true,
-          message: "Did you call ambulance?",
+          message: "Got it. Was the ambulance called?",
           nextQuestionId: 6
         };
       } catch (error) {

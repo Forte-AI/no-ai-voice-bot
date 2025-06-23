@@ -5,9 +5,8 @@ const SIPConfig = require('../sipConfig');
 const { 
   getConversationControls, 
   validateConversationControls,
-  getTurnSettingsForQuestion,
+  getTurnDurationForQuestion,
   getRecordingSettingsForQuestion,
-  getPostResponseTimeoutForQuestion,
   getQuestionSettingsFromConfig
 } = require('../../config/conversationControls');
 
@@ -32,10 +31,10 @@ if (!validation.isValid) {
 }
 
 console.log('Conversation controls loaded:', {
-  turnTimeout: CONVERSATION_CONTROLS.turnSettings.timeoutCount,
-  postResponseTimeout: CONVERSATION_CONTROLS.postResponseTimeoutCount,
-  maxRecordingLength: CONVERSATION_CONTROLS.recordingSettings.maxLength,
-  maxRetries: CONVERSATION_CONTROLS.retrySettings.maxRetries
+  defaultTurnDuration: CONVERSATION_CONTROLS.turnSettings.defaultTurnDuration,
+  finalTimeoutDuration: CONVERSATION_CONTROLS.turnSettings.finalTimeoutDuration,
+  maxRetries: CONVERSATION_CONTROLS.turnSettings.maxRetries,
+  maxRecordingLength: CONVERSATION_CONTROLS.recordingSettings.maxLength
 });
 
 // Initialize a new call session with conversation controls
@@ -60,15 +59,115 @@ const initializeCallSession = (callSid) => {
       retryCount: 0, // Current retry count for this turn
       isWaitingForResponse: false,
       timeoutTimer: null,
-      postResponseTimer: null
+      finalTimeoutTimer: null, // Timer for final timeout (30s silence)
+      callStartTime: Date.now() // Track when call started
     }
   };
   
   callSessions.set(callSid, session);
+  
+  // Start final timeout timer
+  startFinalTimeoutTimer(callSid);
+  
   return firstQuestion;
 };
 
-// Handle incoming call with enhanced conversation controls
+/**
+ * Start the final timeout timer for a call
+ * This timer will hang up the call if the user remains silent for too long
+ * @param {string} callSid - The call SID
+ */
+const startFinalTimeoutTimer = (callSid) => {
+  const session = callSessions.get(callSid);
+  if (!session) {
+    console.log('No session found for final timeout timer:', callSid);
+    return;
+  }
+  
+  // Clear any existing timer
+  if (session.conversationState.finalTimeoutTimer) {
+    clearTimeout(session.conversationState.finalTimeoutTimer);
+  }
+  
+  // Start new timer
+  session.conversationState.finalTimeoutTimer = setTimeout(() => {
+    console.log('Final timeout triggered for call:', callSid);
+    handleFinalTimeout(callSid);
+  }, CONVERSATION_CONTROLS.turnSettings.finalTimeoutDuration);
+  
+  console.log('Final timeout timer started for call:', callSid, 'Duration:', CONVERSATION_CONTROLS.turnSettings.finalTimeoutDuration, 'ms');
+};
+
+/**
+ * Reset the final timeout timer (called on successful responses)
+ * @param {string} callSid - The call SID
+ */
+const resetFinalTimeoutTimer = (callSid) => {
+  const session = callSessions.get(callSid);
+  if (!session) {
+    console.log('No session found for resetting final timeout timer:', callSid);
+    return;
+  }
+  
+  console.log('Resetting final timeout timer for call:', callSid);
+  startFinalTimeoutTimer(callSid);
+};
+
+/**
+ * Clean up final timeout timer for a call
+ * @param {string} callSid - The call SID
+ */
+const cleanupFinalTimeoutTimer = (callSid) => {
+  const session = callSessions.get(callSid);
+  if (!session) {
+    return;
+  }
+  
+  if (session.conversationState.finalTimeoutTimer) {
+    clearTimeout(session.conversationState.finalTimeoutTimer);
+    session.conversationState.finalTimeoutTimer = null;
+    console.log('Final timeout timer cleaned up for call:', callSid);
+  }
+};
+
+/**
+ * Handle final timeout by hanging up the call
+ * @param {string} callSid - The call SID
+ */
+const handleFinalTimeout = async (callSid) => {
+  const session = callSessions.get(callSid);
+  if (!session) {
+    console.log('No session found for final timeout handling:', callSid);
+    return;
+  }
+  
+  console.log('Handling final timeout for call:', callSid, 'Total call duration:', Date.now() - session.conversationState.callStartTime, 'ms');
+  
+  try {
+    // Update the call with a hangup message
+    const twiml = new twilio.twiml.VoiceResponse();
+    twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I haven't heard from you for a while. Please call back when you're ready to continue.");
+    twiml.hangup();
+    
+    // Update the call with the hangup TwiML
+    await twilioClient.calls(callSid).update({
+      twiml: twiml.toString()
+    });
+    
+    console.log('Call hung up due to final timeout:', callSid);
+    
+    // Clean up session
+    callSessions.delete(callSid);
+    
+  } catch (error) {
+    console.error('Error handling final timeout for call:', callSid, error);
+    
+    // If we can't update the call, just clean up the session
+    callSessions.delete(callSid);
+  }
+};
+
+// Handle incoming call with simplified conversation controls
 const handleIncomingCall = async (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
   const callSid = req.body.CallSid;
@@ -105,34 +204,21 @@ const handleIncomingCall = async (req, res) => {
   
   // Get question-specific settings
   const questionSettings = getQuestionSettingsFromConfig(firstQuestion.text, firstQuestion.id, {
-    ...CONVERSATION_CONTROLS.turnSettings,
-    ...CONVERSATION_CONTROLS.recordingSettings,
-    postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
+    turnDuration: CONVERSATION_CONTROLS.turnSettings.defaultTurnDuration,
+    maxLength: CONVERSATION_CONTROLS.recordingSettings.maxLength,
+    minLength: CONVERSATION_CONTROLS.recordingSettings.minLength
   });
   
   console.log('Question-specific settings:', {
     questionId: firstQuestion.id,
     questionText: firstQuestion.text,
-    turnSettings: {
-      timeoutCount: questionSettings.timeoutCount,
-      maxSilenceBeforeTimeout: questionSettings.maxSilenceBeforeTimeout,
-      maxTurnDuration: questionSettings.maxTurnDuration,
-      minTurnDuration: questionSettings.minTurnDuration
-    },
-    recordingSettings: {
-      maxLength: questionSettings.maxLength,
-      minLength: questionSettings.minLength
-    },
-    postResponseTimeout: questionSettings.postResponseTimeoutCount
+    turnDuration: questionSettings.turnDuration,
+    maxLength: questionSettings.maxLength,
+    minLength: questionSettings.minLength
   });
   
   // Start with the first question
   twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, firstQuestion.text);
-  
-  // Insert IBM-style post-response pause
-  if (questionSettings.postResponseTimeoutCount > 0) {
-    twiml.pause({ length: Math.round(questionSettings.postResponseTimeoutCount / 1000) });
-  }
   
   // Calculate recording parameters based on question-specific settings
   const maxLength = Math.min(
@@ -140,40 +226,39 @@ const handleIncomingCall = async (req, res) => {
     questionSettings.maxLength
   );
   
-  console.log('Recording configuration with question-specific settings:', {
+  console.log('Recording configuration with simplified settings:', {
     questionId: firstQuestion.id,
     questionText: firstQuestion.text,
     talkingTime: firstQuestion.talkingTime,
     maxLength: maxLength,
-    turnTimeout: questionSettings.timeoutCount,
-    postResponseTimeout: questionSettings.postResponseTimeoutCount
+    turnDuration: questionSettings.turnDuration
   });
   
-  // Record user's response with question-specific settings
+  // Record user's response with simplified settings
   twiml.record({
     action: `/twilio/response?callSid=${callSid}`,
     maxLength: maxLength,
-    playBeep: questionSettings.playBeep,
-    trim: questionSettings.trimSilence ? 'trim-silence' : 'do-not-trim',
+    playBeep: false,
+    trim: 'trim-silence',
     recordingStatusCallback: `/twilio/recording-status?callSid=${callSid}`,
     recordingStatusCallbackEvent: ['completed'],
-    // Add timeout for turn management based on question type
-    timeout: questionSettings.timeoutCount / 1000, // Convert to seconds
-    // Add silence timeout based on question type
-    silenceTimeout: questionSettings.maxSilenceBeforeTimeout / 1000
+    // Use turn duration as timeout
+    timeout: questionSettings.turnDuration / 1000, // Convert to seconds
+    // Stop recording after 2 seconds of silence (early termination)
+    maxSilence: CONVERSATION_CONTROLS.recordingSettings.maxSilence
   });
   
   res.type('text/xml');
   res.send(twiml.toString());
 };
 
-// Handle user's voice response with enhanced conversation controls
+// Handle user's voice response with simplified conversation controls
 const handleVoiceResponse = async (req, res) => {
   const callSid = req.body.CallSid;
   const recordingSid = req.body.RecordingSid;
   const twiml = new twilio.twiml.VoiceResponse();
   
-  console.log('Handling voice response with conversation controls:', {
+  console.log('Handling voice response with simplified controls:', {
     callSid,
     recordingSid,
     body: req.body
@@ -302,6 +387,9 @@ const handleVoiceResponse = async (req, res) => {
       // Reset retry count on successful validation
       session.conversationState.retryCount = 0;
       
+      // Reset final timeout timer since user successfully responded
+      resetFinalTimeoutTimer(callSid);
+      
       // Update session with validated information
       if (validationResult.storeInfo) {
         session.storeInfo = validationResult.storeInfo;
@@ -321,10 +409,11 @@ const handleVoiceResponse = async (req, res) => {
       // If this is the end of the chat
       if (validationResult.endChat) {
         console.log('Ending chat with message:', validationResult.message);
+        cleanupFinalTimeoutTimer(callSid);
         twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, validationResult.message);
         twiml.hangup();
       } else {
-        // Move to next question with enhanced conversation controls
+        // Move to next question with simplified conversation controls
         console.log('Moving to next question:', validationResult.message);
         twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, validationResult.message);
         
@@ -336,49 +425,33 @@ const handleVoiceResponse = async (req, res) => {
           nextQuestion ? nextQuestion.text : '', 
           nextQuestion ? nextQuestion.id : null, 
           {
-            ...CONVERSATION_CONTROLS.turnSettings,
-            ...CONVERSATION_CONTROLS.recordingSettings,
-            postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
-          }
-        );
-        
-        // Apply question-specific settings
-        const overriddenSettings = getQuestionSettingsFromConfig(
-          nextQuestion ? nextQuestion.text : '', 
-          session.currentQuestionId, 
-          {
-            ...questionSettings,
-            postResponseTimeoutCount: questionSettings.postResponseTimeoutCount
+            turnDuration: CONVERSATION_CONTROLS.turnSettings.defaultTurnDuration,
+            maxLength: CONVERSATION_CONTROLS.recordingSettings.maxLength,
+            minLength: CONVERSATION_CONTROLS.recordingSettings.minLength
           }
         );
         
         const maxLength = Math.min(
-          nextQuestion ? (nextQuestion.talkingTime || overriddenSettings.maxLength) : overriddenSettings.maxLength,
-          overriddenSettings.maxLength
+          nextQuestion ? (nextQuestion.talkingTime || questionSettings.maxLength) : questionSettings.maxLength,
+          questionSettings.maxLength
         );
         
-        console.log('Next question configuration with question-specific settings:', {
+        console.log('Next question configuration with simplified settings:', {
           questionId: session.currentQuestionId,
           questionText: nextQuestion ? nextQuestion.text : 'unknown',
           questionSettings: questionSettings,
           talkingTime: nextQuestion ? nextQuestion.talkingTime : 'default',
           maxLength: maxLength,
-          turnTimeout: overriddenSettings.timeoutCount,
-          postResponseTimeout: overriddenSettings.postResponseTimeoutCount
+          turnDuration: questionSettings.turnDuration
         });
-        
-        // Insert IBM-style post-response pause
-        if (overriddenSettings.postResponseTimeoutCount > 0) {
-          twiml.pause({ length: Math.round(overriddenSettings.postResponseTimeoutCount / 1000) });
-        }
         
         twiml.record({
           action: `/twilio/response?callSid=${callSid}`,
           maxLength: maxLength,
-          playBeep: overriddenSettings.playBeep,
-          trim: overriddenSettings.trimSilence ? 'trim-silence' : 'do-not-trim',
-          timeout: overriddenSettings.timeoutCount / 1000,
-          silenceTimeout: overriddenSettings.maxSilenceBeforeTimeout / 1000
+          playBeep: false,
+          trim: 'trim-silence',
+          timeout: questionSettings.turnDuration / 1000,
+          maxSilence: CONVERSATION_CONTROLS.recordingSettings.maxSilence
         });
       }
     } else {
@@ -386,8 +459,9 @@ const handleVoiceResponse = async (req, res) => {
       session.conversationState.retryCount++;
       console.log('Invalid response, retry count:', session.conversationState.retryCount);
       
-      if (session.conversationState.retryCount >= CONVERSATION_CONTROLS.retrySettings.maxRetries) {
+      if (session.conversationState.retryCount >= CONVERSATION_CONTROLS.turnSettings.maxRetries) {
         console.log('Max retries reached, ending call');
+        cleanupFinalTimeoutTimer(callSid);
         twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm having trouble understanding your responses. Please call back later when you're in a quieter environment.");
         twiml.hangup();
       } else {
@@ -400,49 +474,33 @@ const handleVoiceResponse = async (req, res) => {
           currentQuestion ? currentQuestion.text : '', 
           currentQuestion ? currentQuestion.id : null, 
           {
-            ...CONVERSATION_CONTROLS.turnSettings,
-            ...CONVERSATION_CONTROLS.recordingSettings,
-            postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
-          }
-        );
-        
-        // Apply question-specific settings
-        const overriddenSettings = getQuestionSettingsFromConfig(
-          currentQuestion ? currentQuestion.text : '', 
-          session.currentQuestionId, 
-          {
-            ...questionSettings,
-            postResponseTimeoutCount: questionSettings.postResponseTimeoutCount
+            turnDuration: CONVERSATION_CONTROLS.turnSettings.defaultTurnDuration,
+            maxLength: CONVERSATION_CONTROLS.recordingSettings.maxLength,
+            minLength: CONVERSATION_CONTROLS.recordingSettings.minLength
           }
         );
         
         const maxLength = Math.min(
-          currentQuestion ? (currentQuestion.talkingTime || overriddenSettings.maxLength) : overriddenSettings.maxLength,
-          overriddenSettings.maxLength
+          currentQuestion ? (currentQuestion.talkingTime || questionSettings.maxLength) : questionSettings.maxLength,
+          questionSettings.maxLength
         );
         
-        console.log('Retry configuration with question-specific settings:', {
+        console.log('Retry configuration with simplified settings:', {
           questionId: session.currentQuestionId,
           questionText: currentQuestion ? currentQuestion.text : 'unknown',
           questionSettings: questionSettings,
           retryCount: session.conversationState.retryCount,
           maxLength: maxLength,
-          turnTimeout: overriddenSettings.timeoutCount,
-          postResponseTimeout: overriddenSettings.postResponseTimeoutCount
+          turnDuration: questionSettings.turnDuration
         });
-        
-        // Insert IBM-style post-response pause
-        if (overriddenSettings.postResponseTimeoutCount > 0) {
-          twiml.pause({ length: Math.round(overriddenSettings.postResponseTimeoutCount / 1000) });
-        }
         
         twiml.record({
           action: `/twilio/response?callSid=${callSid}`,
           maxLength: maxLength,
-          playBeep: overriddenSettings.playBeep,
-          trim: overriddenSettings.trimSilence ? 'trim-silence' : 'do-not-trim',
-          timeout: overriddenSettings.timeoutCount / 1000,
-          silenceTimeout: overriddenSettings.maxSilenceBeforeTimeout / 1000
+          playBeep: false,
+          trim: 'trim-silence',
+          timeout: questionSettings.turnDuration / 1000,
+          maxSilence: CONVERSATION_CONTROLS.recordingSettings.maxSilence
         });
       }
     }
@@ -460,7 +518,8 @@ const handleVoiceResponse = async (req, res) => {
     if (session) {
       session.conversationState.retryCount++;
       
-      if (session.conversationState.retryCount >= CONVERSATION_CONTROLS.retrySettings.maxRetries) {
+      if (session.conversationState.retryCount >= CONVERSATION_CONTROLS.turnSettings.maxRetries) {
+        cleanupFinalTimeoutTimer(callSid);
         twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm experiencing technical difficulties. Please call back later.");
         twiml.hangup();
       } else {
@@ -472,52 +531,37 @@ const handleVoiceResponse = async (req, res) => {
           currentQuestion ? currentQuestion.text : '', 
           currentQuestion ? currentQuestion.id : null, 
           {
-            ...CONVERSATION_CONTROLS.turnSettings,
-            ...CONVERSATION_CONTROLS.recordingSettings,
-            postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
-          }
-        );
-        
-        // Apply question-specific settings
-        const overriddenSettings = getQuestionSettingsFromConfig(
-          currentQuestion ? currentQuestion.text : '', 
-          session.currentQuestionId, 
-          {
-            ...questionSettings,
-            postResponseTimeoutCount: questionSettings.postResponseTimeoutCount
+            turnDuration: CONVERSATION_CONTROLS.turnSettings.defaultTurnDuration,
+            maxLength: CONVERSATION_CONTROLS.recordingSettings.maxLength,
+            minLength: CONVERSATION_CONTROLS.recordingSettings.minLength
           }
         );
         
         const maxLength = Math.min(
-          currentQuestion ? (currentQuestion.talkingTime || overriddenSettings.maxLength) : overriddenSettings.maxLength,
-          overriddenSettings.maxLength
+          currentQuestion ? (currentQuestion.talkingTime || questionSettings.maxLength) : questionSettings.maxLength,
+          questionSettings.maxLength
         );
         
-        console.log('Error retry configuration with question-specific settings:', {
+        console.log('Error retry configuration with simplified settings:', {
           questionId: session.currentQuestionId,
           questionText: currentQuestion ? currentQuestion.text : 'unknown',
           questionSettings: questionSettings,
           retryCount: session.conversationState.retryCount,
           maxLength: maxLength,
-          turnTimeout: overriddenSettings.timeoutCount,
-          postResponseTimeout: overriddenSettings.postResponseTimeoutCount
+          turnDuration: questionSettings.turnDuration
         });
-        
-        // Insert IBM-style post-response pause
-        if (overriddenSettings.postResponseTimeoutCount > 0) {
-          twiml.pause({ length: Math.round(overriddenSettings.postResponseTimeoutCount / 1000) });
-        }
         
         twiml.record({
           action: `/twilio/response?callSid=${callSid}`,
           maxLength: maxLength,
-          playBeep: overriddenSettings.playBeep,
-          trim: overriddenSettings.trimSilence ? 'trim-silence' : 'do-not-trim',
-          timeout: overriddenSettings.timeoutCount / 1000,
-          silenceTimeout: overriddenSettings.maxSilenceBeforeTimeout / 1000
+          playBeep: false,
+          trim: 'trim-silence',
+          timeout: questionSettings.turnDuration / 1000,
+          maxSilence: CONVERSATION_CONTROLS.recordingSettings.maxSilence
         });
       }
     } else {
+      cleanupFinalTimeoutTimer(callSid);
       twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error with your call. Please try again later.");
       twiml.hangup();
     }
@@ -544,49 +588,33 @@ const handleRecordingError = (twiml, session, callSid, message) => {
     currentQuestion ? currentQuestion.text : '', 
     currentQuestion ? currentQuestion.id : null, 
     {
-      ...CONVERSATION_CONTROLS.turnSettings,
-      ...CONVERSATION_CONTROLS.recordingSettings,
-      postResponseTimeoutCount: CONVERSATION_CONTROLS.postResponseTimeoutCount
-    }
-  );
-  
-  // Apply question-specific settings
-  const overriddenSettings = getQuestionSettingsFromConfig(
-    currentQuestion ? currentQuestion.text : '', 
-    session.currentQuestionId, 
-    {
-      ...questionSettings,
-      postResponseTimeoutCount: questionSettings.postResponseTimeoutCount
+      turnDuration: CONVERSATION_CONTROLS.turnSettings.defaultTurnDuration,
+      maxLength: CONVERSATION_CONTROLS.recordingSettings.maxLength,
+      minLength: CONVERSATION_CONTROLS.recordingSettings.minLength
     }
   );
   
   const maxLength = Math.min(
-    currentQuestion ? (currentQuestion.talkingTime || overriddenSettings.maxLength) : overriddenSettings.maxLength,
-    overriddenSettings.maxLength
+    currentQuestion ? (currentQuestion.talkingTime || questionSettings.maxLength) : questionSettings.maxLength,
+    questionSettings.maxLength
   );
   
-  console.log('Recording error retry configuration with question-specific settings:', {
+  console.log('Recording error retry configuration with simplified settings:', {
     questionId: session.currentQuestionId,
     questionText: currentQuestion ? currentQuestion.text : 'unknown',
     questionSettings: questionSettings,
     talkingTime: currentQuestion ? currentQuestion.talkingTime : 'default',
     maxLength: maxLength,
-    turnTimeout: overriddenSettings.timeoutCount,
-    postResponseTimeout: overriddenSettings.postResponseTimeoutCount
+    turnDuration: questionSettings.turnDuration
   });
-  
-  // Insert IBM-style post-response pause
-  if (overriddenSettings.postResponseTimeoutCount > 0) {
-    twiml.pause({ length: Math.round(overriddenSettings.postResponseTimeoutCount / 1000) });
-  }
   
   twiml.record({
     action: `/twilio/response?callSid=${callSid}`,
     maxLength: maxLength,
-    playBeep: overriddenSettings.playBeep,
-    trim: overriddenSettings.trimSilence ? 'trim-silence' : 'do-not-trim',
-    timeout: overriddenSettings.timeoutCount / 1000,
-    silenceTimeout: overriddenSettings.maxSilenceBeforeTimeout / 1000
+    playBeep: false,
+    trim: 'trim-silence',
+    timeout: questionSettings.turnDuration / 1000,
+    maxSilence: CONVERSATION_CONTROLS.recordingSettings.maxSilence
   });
 };
 
@@ -607,7 +635,7 @@ const handleRecordingStatus = async (req, res) => {
 };
 
 /**
- * Get question-specific settings using the simple JSON config
+ * Get question-specific settings using the simplified JSON config
  * @param {string} questionText - The question text
  * @param {string} questionId - The question ID
  * @param {Object} defaultSettings - Default settings
