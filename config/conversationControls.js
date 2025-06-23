@@ -29,9 +29,9 @@ const CONVERSATION_CONTROLS = {
   
   // Retry settings
   retrySettings: {
-    maxRetries: 3, // Maximum number of retries for failed transcriptions
-    retryDelay: 2000, // Delay between retries in milliseconds
-    backoffMultiplier: 1.5, // Exponential backoff multiplier
+    maxRetries: 8, // Increased number of retries for more chances
+    retryDelay: 1000, // Lower delay between retries in milliseconds for higher frequency
+    backoffMultiplier: 1.3, // Slower exponential backoff for more frequent checks
     maxRetryDelay: 10000 // Maximum delay between retries
   },
   
