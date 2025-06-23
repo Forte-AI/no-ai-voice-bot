@@ -31,7 +31,14 @@ const retryCounts = new Map();
 
 // Helper function to manage retry counts
 const getRetryCount = (questionId) => retryCounts.get(questionId) || 0;
-const incrementRetryCount = (questionId) => retryCounts.set(questionId, getRetryCount(questionId) + 1);
+const incrementRetryCount = (questionId, callSid = null) => {
+  retryCounts.set(questionId, getRetryCount(questionId) + 1);
+  
+  // Log that retry count was incremented - twilioHandler will handle final timeout reset
+  if (callSid) {
+    console.log('Retry count incremented for question:', questionId, 'callSid:', callSid, 'new count:', getRetryCount(questionId) + 1);
+  }
+};
 const resetRetryCount = (questionId) => retryCounts.set(questionId, 0);
 
 // Helper to format store number for TTS (e.g., 1234 -> 1 2 3 4)
@@ -46,7 +53,7 @@ const questions = [
     text: `Are you a Sonic Franchise?`,
     type: QuestionType.YES_NO,
     talkingTime: 3, // Short time for yes/no question
-    validate: (response) => {
+    validate: (response, storeInfo = null, callSid = null) => {
       const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
       const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
       
@@ -75,7 +82,7 @@ const questions = [
         };
       }
       
-      incrementRetryCount(1);
+      incrementRetryCount(1, callSid);
       return {
         isValid: false,
         message: "I didn't quite catch that. Are you a Sonic franchise?"
@@ -86,7 +93,7 @@ const questions = [
     id: 2,
     type: QuestionType.TEXT,
     talkingTime: 8, // Longer time for store number input
-    validate: async (response, storeInfo = null) => {
+    validate: async (response, storeInfo = null, callSid = null) => {
       // If we have store info from a previous validation, use it
       if (storeInfo) {
         return {
@@ -127,7 +134,7 @@ const questions = [
             };
           }
           
-          incrementRetryCount(2);
+          incrementRetryCount(2, callSid);
           return {
             isValid: false,
             message: "I couldn't find your store number in our system. Can you tell me the Sonic store number again?"
@@ -164,7 +171,7 @@ const questions = [
           };
         }
         
-        incrementRetryCount(2);
+        incrementRetryCount(2, callSid);
         return {
           isValid: false,
           message: "I couldn't find your store number in our system. Can you tell me the Sonic store number again?"
@@ -186,7 +193,7 @@ const questions = [
           };
         }
         
-        incrementRetryCount(2);
+        incrementRetryCount(2, callSid);
         return {
           isValid: false,
           message: "I couldn't find your store number in our system. Can you tell me the Sonic store number again?"
@@ -198,7 +205,7 @@ const questions = [
     id: 3,
     type: QuestionType.YES_NO,
     talkingTime: 3, // Short time for yes/no question
-    validate: (response, storeInfo) => {
+    validate: (response, storeInfo, callSid = null) => {
       const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
       const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
       
@@ -226,7 +233,7 @@ const questions = [
         };
       }
       
-      incrementRetryCount(3);
+      incrementRetryCount(3, callSid);
       return {
         isValid: false,
         message: "I didn't quite catch that. Is this the correct store number?"
@@ -237,7 +244,7 @@ const questions = [
     id: 4,
     type: QuestionType.TEXT,
     talkingTime: 8, // Default time for date input
-    validate: async (response) => {
+    validate: async (response, storeInfo = null, callSid = null) => {
       try {
         console.log('Validating date input:', response);
         
@@ -281,7 +288,7 @@ const questions = [
       
       // Handle both invalid dates and API errors with the same retry logic
       if (getRetryCount(4) === 0) {
-        incrementRetryCount(4);
+        incrementRetryCount(4, callSid);
         return {
           isValid: false,
           message: "I didn't hear the date properly. What is the date of the incident, such as July 4th?"
@@ -302,7 +309,7 @@ const questions = [
     id: 5,
     type: QuestionType.TEXT,
     talkingTime: 15, // Longer time for incident description
-    validate: async (response) => {
+    validate: async (response, storeInfo = null, callSid = null) => {
       try {
         console.log('Validating incident description:', response);
         
@@ -336,7 +343,7 @@ const questions = [
         
         // If this is the first invalid attempt, ask for clarification
         if (getRetryCount(5) === 0) {
-          incrementRetryCount(5);
+          incrementRetryCount(5, callSid);
           return {
             isValid: false,
             message: "Please provide a clear description of what happened during the incident. For example: 'A customer slipped on a wet floor in the dining area'."
@@ -361,7 +368,7 @@ const questions = [
         
         // If this is the first error, try again
         if (getRetryCount(5) === 0) {
-          incrementRetryCount(5);
+          incrementRetryCount(5, callSid);
           return {
             isValid: false,
             message: "Please provide a clear description of what happened during the incident. For example: 'A customer slipped on a wet floor in the dining area' or 'The drive-thru speaker system malfunctioned'."
@@ -382,7 +389,7 @@ const questions = [
     id: 6,
     type: QuestionType.YES_NO,
     talkingTime: 3, // Short time for yes/no question
-    validate: (response) => {
+    validate: (response, storeInfo = null, callSid = null) => {
       const isYes = YES_WORDS.some(word => response.toLowerCase().includes(word));
       const isNo = NO_WORDS.some(word => response.toLowerCase().includes(word));
       
@@ -396,7 +403,7 @@ const questions = [
       
       // If response is unclear, give one retry
       if (getRetryCount(6) === 0) {
-        incrementRetryCount(6);
+        incrementRetryCount(6, callSid);
         return {
           isValid: false,
           message: "Sorry, I didn't catch that. Was the ambulance called?"
@@ -416,7 +423,7 @@ const questions = [
     id: 7,
     type: QuestionType.TEXT,
     talkingTime: 10, // Default time for name input
-    validate: async (response) => {
+    validate: async (response, storeInfo = null, callSid = null) => {
       try {
         console.log('Validating person name:', response);
         
@@ -459,7 +466,7 @@ const questions = [
       
       // Handle both invalid names and API errors with the same retry logic
       if (getRetryCount(7) === 0) {
-        incrementRetryCount(7);
+        incrementRetryCount(7, callSid);
         return {
           isValid: false,
           message: "Could you provide the name of the person involved in the incident?"
@@ -479,7 +486,7 @@ const questions = [
     id: 8,
     type: QuestionType.TEXT,
     talkingTime: 10, // Default time for phone number
-    validate: async (response) => {
+    validate: async (response, storeInfo = null, callSid = null) => {
       try {
         console.log('Validating phone number:', response);
         
@@ -522,7 +529,7 @@ const questions = [
       
       // Handle both invalid phone numbers and API errors with the same retry logic
       if (getRetryCount(8) === 0) {
-        incrementRetryCount(8);
+        incrementRetryCount(8, callSid);
         return {
           isValid: false,
           message: "Could you provide the phone number of the person involved in the incident? If you don't know, please say 'I don't know'."
@@ -542,7 +549,7 @@ const questions = [
     id: 9,
     type: QuestionType.TEXT,
     talkingTime: 10, // Longer time for address input
-    validate: async (response) => {
+    validate: async (response, storeInfo = null, callSid = null) => {
       try {
         console.log('Validating address:', response);
         
@@ -585,7 +592,7 @@ const questions = [
       
       // Handle both invalid addresses and API errors with the same retry logic
       if (getRetryCount(9) === 0) {
-        incrementRetryCount(9);
+        incrementRetryCount(9, callSid);
         return {
           isValid: false,
           message: "Please provide the full address of the person involved in the incident. You should include the zip code."
@@ -605,7 +612,7 @@ const questions = [
     id: 10,
     type: QuestionType.TEXT,
     talkingTime: 10, // Longer time for contact info
-    validate: async (response) => {
+    validate: async (response, storeInfo = null, callSid = null) => {
       try {
         console.log('Validating contact name and phone:', response);
         
@@ -657,7 +664,7 @@ const questions = [
       
       // Handle both invalid names and API errors with the same retry logic
       if (getRetryCount(10) === 0) {
-        incrementRetryCount(10);
+        incrementRetryCount(10, callSid);
         return {
           isValid: false,
           message: "Could you provide your name or the name of the person we can reach out to regarding this incident. This will facilitate prompt communication with the adjustor within the next 24 hours."
@@ -677,7 +684,7 @@ const questions = [
     id: 11,
     type: QuestionType.TEXT,
     talkingTime: 10, // Default time for phone number
-    validate: async (response) => {
+    validate: async (response, storeInfo = null, callSid = null) => {
       try {
         console.log('Validating phone number:', response);
         
@@ -720,7 +727,7 @@ const questions = [
       
       // Handle both invalid phone numbers and API errors with the same retry logic
       if (getRetryCount(11) === 0) {
-        incrementRetryCount(11);
+        incrementRetryCount(11, callSid);
         return {
           isValid: false,
           message: "We need a phone number so our adjuster can follow up. Please provide the best phone number we can reach you at."
@@ -751,15 +758,15 @@ const getNextQuestion = (currentQuestionId, nextQuestionId) => {
 const getFirstQuestion = () => questions[0];
 
 // Helper function to validate a response
-const validateResponse = async (questionId, response, storeInfo = null) => {
+const validateResponse = async (questionId, response, storeInfo = null, callSid = null) => {
   const question = questions.find(q => q.id === questionId);
   if (!question) return { isValid: false, message: "Invalid question." };
   
   // Handle async validation
   if (question.validate.constructor.name === 'AsyncFunction') {
-    return await question.validate(response, storeInfo);
+    return await question.validate(response, storeInfo, callSid);
   } else {
-    return question.validate(response, storeInfo);
+    return question.validate(response, storeInfo, callSid);
   }
 };
 

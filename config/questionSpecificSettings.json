@@ -3,24 +3,24 @@
     "1": {
       "description": "Are you a Sonic Franchise?",
       "settings": {
-        "turnDuration": 10000,
-        "maxRecordingLength": 10,
+        "turnDuration": 5000,
+        "maxRecordingLength": 5,
         "minRecordingLength": 0.8
       }
     },
     "2": {
       "description": "Store number question",
       "settings": {
-        "turnDuration": 12000,
-        "maxRecordingLength": 12,
+        "turnDuration": 10000,
+        "maxRecordingLength": 10,
         "minRecordingLength": 0.8
       }
     },
     "3": {
       "description": "Store confirmation question",
       "settings": {
-        "turnDuration": 10000,
-        "maxRecordingLength": 10,
+        "turnDuration": 5000,
+        "maxRecordingLength": 5,
         "minRecordingLength": 0.8
       }
     },
@@ -83,8 +83,8 @@
     "11": {
       "description": "Contact phone number question",
       "settings": {
-        "turnDuration": 15000,
-        "maxRecordingLength": 15,
+        "turnDuration": 12000,
+        "maxRecordingLength": 12,
         "minRecordingLength": 1.0
       }
     }

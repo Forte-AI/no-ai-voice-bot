@@ -146,7 +146,7 @@ const handleFinalTimeout = async (callSid) => {
   try {
     // Update the call with a hangup message
     const twiml = new twilio.twiml.VoiceResponse();
-    twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I haven't heard from you for a while. Please call back when you're ready to continue.");
+    twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I haven't heard from you for a while. If you need more time to think, please call back when you're ready to continue. You can also visit our website at www.fortis risk.com to submit your claim online. Thank you for your patience.");
     twiml.hangup();
     
     // Update the call with the hangup TwiML
@@ -372,7 +372,7 @@ const handleVoiceResponse = async (req, res) => {
     });
     
     // Validate the response
-    const validationResult = await validateResponse(session.currentQuestionId, transcription, session.storeInfo);
+    const validationResult = await validateResponse(session.currentQuestionId, transcription, session.storeInfo, callSid);
     console.log('Validation result:', validationResult);
     
     console.log('Session state after validation:', {
@@ -417,6 +417,9 @@ const handleVoiceResponse = async (req, res) => {
         console.log('Moving to next question:', validationResult.message);
         twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, validationResult.message);
         
+        // Reset final timeout timer when bot starts speaking
+        resetFinalTimeoutWhenBotSpeaks(callSid);
+        
         // Get the next question to determine talking time and question type
         const nextQuestion = questions.find(q => q.id === session.currentQuestionId);
         
@@ -459,6 +462,9 @@ const handleVoiceResponse = async (req, res) => {
       session.conversationState.retryCount++;
       console.log('Invalid response, retry count:', session.conversationState.retryCount);
       
+      // Reset final timeout timer when entering retry logic
+      resetFinalTimeoutForRetry(callSid);
+      
       if (session.conversationState.retryCount >= CONVERSATION_CONTROLS.turnSettings.maxRetries) {
         console.log('Max retries reached, ending call');
         cleanupFinalTimeoutTimer(callSid);
@@ -467,6 +473,9 @@ const handleVoiceResponse = async (req, res) => {
       } else {
         console.log('Invalid response, asking user to repeat:', validationResult.message);
         twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, validationResult.message);
+        
+        // Reset final timeout timer when bot starts speaking
+        resetFinalTimeoutWhenBotSpeaks(callSid);
         
         // Use current question's settings for retry
         const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
@@ -518,12 +527,18 @@ const handleVoiceResponse = async (req, res) => {
     if (session) {
       session.conversationState.retryCount++;
       
+      // Reset final timeout timer when entering error retry logic
+      resetFinalTimeoutForRetry(callSid);
+      
       if (session.conversationState.retryCount >= CONVERSATION_CONTROLS.turnSettings.maxRetries) {
         cleanupFinalTimeoutTimer(callSid);
         twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm experiencing technical difficulties. Please call back later.");
         twiml.hangup();
       } else {
         twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, "I'm sorry, there was an error processing your response. Please try again.");
+        
+        // Reset final timeout timer when bot starts speaking
+        resetFinalTimeoutWhenBotSpeaks(callSid);
         
         // Use current question's settings for retry
         const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
@@ -581,6 +596,9 @@ const handleRecordingError = (twiml, session, callSid, message) => {
   });
   
   twiml.say({ voice: 'Google.en-US-Chirp3-HD-Charon' }, message);
+  
+  // Reset final timeout timer when bot starts speaking
+  resetFinalTimeoutWhenBotSpeaks(callSid);
   
   // Use current question's settings for retry
   const currentQuestion = questions.find(q => q.id === session.currentQuestionId);
@@ -645,11 +663,44 @@ const getQuestionSpecificSettings = (questionText, questionId, defaultSettings) 
   return getQuestionSettingsFromConfig(questionText, questionId, defaultSettings);
 };
 
+/**
+ * Reset final timeout timer - can be called from questions.js when entering retry logic
+ * @param {string} callSid - The call SID
+ */
+const resetFinalTimeoutForRetry = (callSid) => {
+  const session = callSessions.get(callSid);
+  if (!session) {
+    console.log('No session found for resetting final timeout timer (retry):', callSid);
+    return;
+  }
+  
+  console.log('Resetting final timeout timer for retry logic, call:', callSid);
+  startFinalTimeoutTimer(callSid);
+};
+
+/**
+ * Reset final timeout timer when bot starts speaking
+ * This gives users more time to think after each bot message
+ * @param {string} callSid - The call SID
+ */
+const resetFinalTimeoutWhenBotSpeaks = (callSid) => {
+  const session = callSessions.get(callSid);
+  if (!session) {
+    console.log('No session found for resetting final timeout timer (bot speaks):', callSid);
+    return;
+  }
+  
+  console.log('Resetting final timeout timer when bot starts speaking, call:', callSid);
+  startFinalTimeoutTimer(callSid);
+};
+
 module.exports = {
   handleIncomingCall,
   handleVoiceResponse,
   handleRecordingStatus,
   CONVERSATION_CONTROLS,
   callSessions,
-  getQuestionSpecificSettings
+  getQuestionSpecificSettings,
+  resetFinalTimeoutForRetry,
+  resetFinalTimeoutWhenBotSpeaks
 }; 

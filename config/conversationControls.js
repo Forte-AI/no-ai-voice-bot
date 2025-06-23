@@ -13,7 +13,7 @@ const CONVERSATION_CONTROLS = {
   turnSettings: {
     defaultTurnDuration: 15000, // 15 seconds default turn duration
     maxRetries: 3, // Maximum retries before ending call
-    finalTimeoutDuration: 30000 // 30 seconds final timeout before hanging up
+    finalTimeoutDuration: 60000 // 60 seconds final timeout before hanging up (increased for better user experience)
   },
   
   // Recording settings
@@ -154,8 +154,8 @@ const validateConversationControls = (controls) => {
     errors.push('turnSettings.defaultTurnDuration must be between 5000 and 60000 milliseconds');
   }
   
-  if (controls.turnSettings.finalTimeoutDuration < 10000 || controls.turnSettings.finalTimeoutDuration > 120000) {
-    errors.push('turnSettings.finalTimeoutDuration must be between 10000 and 120000 milliseconds');
+  if (controls.turnSettings.finalTimeoutDuration < 10000 || controls.turnSettings.finalTimeoutDuration > 300000) {
+    errors.push('turnSettings.finalTimeoutDuration must be between 10000 and 300000 milliseconds');
   }
   
   // Validate recording settings
